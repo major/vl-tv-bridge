@@ -9,7 +9,6 @@
   "github": {
     "release": true,
     "releaseName": "v${version}",
-    "releaseNotes": "## VL TradingView Bridge v${version}\n\n### Installation\n- **Firefox (Signed)**: Download the `-signed.xpi` file - this is signed by Mozilla and will install without warnings\n- **Source Code**: Download the `.zip` for review or manual installation\n\n### Files\n- `vl-tv-bridge-${version}-signed.xpi` - Mozilla-signed extension (recommended)\n- `vl-tv-bridge-${version}.zip` - Source code\n\n### Changes\nSee commit history for details.",
     "assets": [
       "build/vl-tv-bridge-*.zip",
       "build/vl-tv-bridge-*-signed.xpi"

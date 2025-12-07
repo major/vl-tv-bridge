@@ -8,9 +8,15 @@
     "sign": "web-ext sign --source-dir=firefox --artifacts-dir=build --channel=unlisted --api-key=$WEB_EXT_API_KEY --api-secret=$WEB_EXT_API_SECRET",
     "build:signed": "npm run build && npm run sign",
     "lint": "web-ext lint --source-dir=firefox",
-    "start": "web-ext run --source-dir=firefox"
+    "start": "web-ext run --source-dir=firefox",
+    "release": "release-it",
+    "release:minor": "release-it minor",
+    "release:major": "release-it major",
+    "release:dry": "release-it --dry-run"
   },
   "devDependencies": {
+    "@release-it/conventional-changelog": "^10.0.2",
+    "release-it": "^19.0.6",
     "web-ext": "^8.3.0"
   },
   "repository": {

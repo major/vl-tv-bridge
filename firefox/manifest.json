@@ -5,6 +5,12 @@
   "description": "Draw VolumeLeaders trade levels on TradingView charts",
   "author": "major",
 
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "{2ccc585c-0151-4d87-ad17-dde65a42c3ca}"
+    }
+  },
+
   "permissions": [
     "webRequest",
     "webRequestBlocking",

@@ -1,0 +1,362 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 13px;
+  background: #1a1a2e;
+  color: #eee;
+  min-width: 320px;
+  max-width: 400px;
+}
+
+.container {
+  padding: 12px;
+}
+
+header {
+  margin-bottom: 12px;
+  border-bottom: 1px solid #333;
+  padding-bottom: 8px;
+}
+
+header h1 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.status {
+  font-size: 11px;
+  color: #888;
+}
+
+.section {
+  margin-bottom: 12px;
+}
+
+.section.hero {
+  background: #252542;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.section h2,
+.section-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: #aaa;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.section-header .chevron {
+  margin-left: auto;
+  font-size: 10px;
+  transition: transform 0.2s;
+}
+
+.section-content.collapsed {
+  display: none;
+}
+
+.section-content.collapsed + .section-header .chevron {
+  transform: rotate(-90deg);
+}
+
+.badge {
+  background: #02A9DE;
+  color: white;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+/* Status indicators */
+.tv-status,
+.vl-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 12px;
+}
+
+.tv-status .indicator,
+.vl-status .indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #666;
+  flex-shrink: 0;
+}
+
+.tv-status.ready .indicator,
+.vl-status.ready .indicator {
+  background: #4CAF50;
+  box-shadow: 0 0 6px #4CAF50;
+}
+
+.tv-status.not-ready .indicator,
+.vl-status.not-ready .indicator {
+  background: #f44336;
+}
+
+.tv-status.checking .indicator,
+.vl-status.checking .indicator {
+  background: #FFC107;
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Chart symbol display */
+.chart-symbol {
+  font-size: 20px;
+  font-weight: 700;
+  color: #02A9DE;
+  text-align: center;
+  padding: 8px 0;
+  min-height: 36px;
+}
+
+.chart-symbol.empty {
+  color: #666;
+  font-size: 12px;
+  font-weight: normal;
+}
+
+/* Buttons */
+.button-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.btn {
+  padding: 10px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn.primary {
+  background: #02A9DE;
+  color: white;
+  flex: 1;
+}
+
+.btn.primary:hover:not(:disabled) {
+  background: #ff8533;
+}
+
+.btn.primary.large {
+  padding: 14px 20px;
+  font-size: 15px;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.btn.secondary {
+  background: #333;
+  color: #ccc;
+  flex: 1;
+}
+
+.btn.secondary:hover:not(:disabled) {
+  background: #444;
+}
+
+.btn.small {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.btn.text {
+  background: none;
+  color: #888;
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
+.btn.text:hover {
+  color: #f44336;
+}
+
+/* Levels List */
+.levels-list {
+  max-height: 150px;
+  overflow-y: auto;
+  background: #1a1a2e;
+  border-radius: 6px;
+  padding: 8px;
+  margin-bottom: 8px;
+}
+
+.levels-list .empty {
+  color: #666;
+  font-size: 12px;
+  text-align: center;
+  padding: 12px;
+}
+
+.level-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  margin-bottom: 4px;
+}
+
+.level-item:hover {
+  background: #333;
+}
+
+.level-item .rank {
+  background: #02A9DE;
+  color: white;
+  font-size: 9px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-weight: 600;
+  min-width: 20px;
+  text-align: center;
+}
+
+.level-item .price {
+  font-family: 'Menlo', 'Monaco', monospace;
+  color: #4CAF50;
+}
+
+.level-item .dollars {
+  color: #888;
+  font-size: 10px;
+  margin-left: auto;
+  margin-right: 8px;
+}
+
+.level-item .remove {
+  background: none;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 6px;
+}
+
+.level-item .remove:hover {
+  color: #f44336;
+}
+
+/* Symbol Groups */
+.symbol-group {
+  margin-bottom: 8px;
+}
+
+.symbol-group .symbol-header {
+  font-weight: 600;
+  color: #02A9DE;
+  font-size: 11px;
+  margin-bottom: 4px;
+  padding: 2px 0;
+  border-bottom: 1px solid #333;
+}
+
+/* Input Group */
+.input-group {
+  display: flex;
+  gap: 8px;
+}
+
+.input-group input {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid #333;
+  border-radius: 4px;
+  background: #1a1a2e;
+  color: #eee;
+  font-size: 12px;
+}
+
+.input-group input:focus {
+  outline: none;
+  border-color: #02A9DE;
+}
+
+.input-group input::placeholder {
+  color: #666;
+}
+
+/* Footer */
+footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 8px;
+  border-top: 1px solid #333;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #888;
+  cursor: pointer;
+}
+
+.toggle input {
+  accent-color: #02A9DE;
+}
+
+/* Scrollbar */
+.levels-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.levels-list::-webkit-scrollbar-track {
+  background: #1a1a2e;
+}
+
+.levels-list::-webkit-scrollbar-thumb {
+  background: #444;
+  border-radius: 3px;
+}
+
+.levels-list::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* Collapsible sections */
+.collapsible .section-header {
+  user-select: none;
+}
+
+.collapsible .section-header:hover {
+  color: #ccc;
+}

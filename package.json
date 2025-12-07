@@ -1,0 +1,22 @@
+{
+  "name": "vl-tv-bridge",
+  "version": "1.0.0",
+  "description": "Draw VolumeLeaders trade levels on TradingView charts",
+  "scripts": {
+    "build": "web-ext build --source-dir=firefox --artifacts-dir=build --overwrite-dest && npm run rename-artifacts",
+    "rename-artifacts": "VERSION=$(node -p \"require('./firefox/manifest.json').version\") && mv build/vl_tradingview_bridge-$VERSION.zip build/vl-tv-bridge-$VERSION.zip && cp build/vl-tv-bridge-$VERSION.zip build/vl-tv-bridge-$VERSION.xpi",
+    "sign": "web-ext sign --source-dir=firefox --artifacts-dir=build --channel=unlisted --api-key=$WEB_EXT_API_KEY --api-secret=$WEB_EXT_API_SECRET",
+    "build:signed": "npm run build && npm run sign",
+    "lint": "web-ext lint --source-dir=firefox",
+    "start": "web-ext run --source-dir=firefox"
+  },
+  "devDependencies": {
+    "web-ext": "^8.3.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/major/vl-tv-bridge.git"
+  },
+  "author": "major",
+  "license": "MIT"
+}

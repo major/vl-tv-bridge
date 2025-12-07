@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>VL TradingView Bridge</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>📊 VL → TV Bridge</h1>
+      <div id="status" class="status"></div>
+    </header>
+
+    <!-- Main Action Section -->
+    <section id="main-action" class="section hero">
+      <div id="tv-status" class="tv-status">
+        <span class="indicator"></span>
+        <span class="text">Checking TradingView...</span>
+      </div>
+
+      <div id="chart-symbol" class="chart-symbol"></div>
+
+      <div id="vl-status" class="vl-status">
+        <span class="indicator"></span>
+        <span class="text">Checking VL login...</span>
+      </div>
+
+      <button id="fetch-draw-btn" class="btn primary large" disabled>
+        🚀 Fetch & Draw VL Levels
+      </button>
+
+      <div class="button-row">
+        <button id="clear-chart-btn" class="btn secondary" disabled>
+          🗑️ Clear Chart
+        </button>
+        <button id="refresh-btn" class="btn secondary">
+          🔄 Refresh
+        </button>
+      </div>
+    </section>
+
+    <!-- Cached Levels Section -->
+    <section id="levels-section" class="section collapsible">
+      <h2 class="section-header" data-toggle="levels-content">
+        Cached Levels <span id="level-count" class="badge">0</span>
+        <span class="chevron">▼</span>
+      </h2>
+      <div id="levels-content" class="section-content">
+        <div id="levels-list" class="levels-list">
+          <div class="empty">No levels cached yet.</div>
+        </div>
+        <div class="button-row">
+          <button id="draw-cached-btn" class="btn small" disabled>Draw Cached</button>
+          <button id="clear-cache-btn" class="btn small text">Clear Cache</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Manual Entry Section -->
+    <section class="section collapsible">
+      <h2 class="section-header" data-toggle="manual-content">
+        Manual Entry
+        <span class="chevron">▼</span>
+      </h2>
+      <div id="manual-content" class="section-content collapsed">
+        <div class="input-group">
+          <input type="text" id="symbol-input" placeholder="Symbol (e.g., AAPL)">
+          <input type="number" id="price-input" placeholder="Price" step="0.01">
+          <button id="add-btn" class="btn small">+ Add</button>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <label class="toggle">
+        <input type="checkbox" id="debug-toggle">
+        <span>Debug mode</span>
+      </label>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

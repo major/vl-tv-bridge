@@ -1,16 +1,14 @@
 {
   "manifest_version": 2,
   "name": "VL TradingView Bridge",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Draw VolumeLeaders trade levels on TradingView charts",
   "author": "major",
-
   "browser_specific_settings": {
     "gecko": {
       "id": "{2ccc585c-0151-4d87-ad17-dde65a42c3ca}"
     }
   },
-
   "permissions": [
     "webRequest",
     "webRequestBlocking",
@@ -18,23 +16,27 @@
     "cookies",
     "<all_urls>"
   ],
-
   "background": {
-    "scripts": ["background.js"],
+    "scripts": [
+      "background.js"
+    ],
     "persistent": true
   },
-
   "content_scripts": [
     {
-      "matches": ["*://*.tradingview.com/*"],
-      "js": ["content-script.js"],
+      "matches": [
+        "*://*.tradingview.com/*"
+      ],
+      "js": [
+        "content-script.js"
+      ],
       "run_at": "document_idle",
       "all_frames": false
     }
   ],
-
-  "web_accessible_resources": ["injected.js"],
-
+  "web_accessible_resources": [
+    "injected.js"
+  ],
   "browser_action": {
     "default_icon": {
       "48": "icons/icon-48.png"
@@ -42,7 +44,6 @@
     "default_title": "VL TradingView Bridge",
     "default_popup": "popup/popup.html"
   },
-
   "icons": {
     "48": "icons/icon-48.png",
     "96": "icons/icon-96.png"

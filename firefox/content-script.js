@@ -136,9 +136,12 @@ if (window !== window.top) {
   /**
    * Draw trade levels on the chart
    * First clears any existing VL-prefixed shapes, then draws new ones
+   * Handles both single levels (type: 'level') and zones (type: 'zone')
    */
   async function drawLevels(levels, options = {}) {
-    console.log(`🎯 CONTENT: drawLevels called with ${levels.length} levels:`, levels.map(l => l.price));
+    const levelCount = levels.filter(l => l.type !== 'zone').length;
+    const zoneCount = levels.filter(l => l.type === 'zone').length;
+    console.log(`🎯 CONTENT: drawLevels called with ${levelCount} levels and ${zoneCount} zones`);
 
     // Clear existing VL shapes first
     try {
@@ -150,26 +153,63 @@ if (window !== window.top) {
 
     const results = [];
 
-    for (const level of levels) {
+    for (const item of levels) {
       try {
-        const result = await sendToInjected('DRAW_LINE', {
-          price: level.price,
-          label: level.label || `VL ${level.price}`,
-          options: {
-            linecolor: options.color || '#02A9DE',
-            linewidth: options.width || 2,
-            linestyle: options.style || 0, // Solid
-            ...options
-          }
-        });
+        let result;
 
-        if (result.shapeId) {
-          drawnShapeIds.push(result.shapeId);
-          results.push({ price: level.price, shapeId: result.shapeId, success: true });
+        if (item.type === 'zone') {
+          // Draw zone as thick line at midpoint
+          result = await sendToInjected('DRAW_ZONE', {
+            highPrice: item.highPrice,
+            lowPrice: item.lowPrice,
+            midPrice: item.midPrice,
+            label: item.label,
+            options: {
+              linecolor: options.color || '#02A9DE',
+              linewidth: 4, // Thick line for zones
+              linestyle: options.style || 0,
+              ...options
+            }
+          });
+
+          if (result.shapeId) {
+            drawnShapeIds.push(result.shapeId);
+            results.push({
+              type: 'zone',
+              midPrice: item.midPrice,
+              highPrice: item.highPrice,
+              lowPrice: item.lowPrice,
+              shapeId: result.shapeId,
+              success: true
+            });
+          }
+        } else {
+          // Draw single level as normal line
+          result = await sendToInjected('DRAW_LINE', {
+            price: item.price,
+            label: item.label || `VL ${item.price}`,
+            options: {
+              linecolor: options.color || '#02A9DE',
+              linewidth: options.width || 2,
+              linestyle: options.style || 0,
+              ...options
+            }
+          });
+
+          if (result.shapeId) {
+            drawnShapeIds.push(result.shapeId);
+            results.push({ type: 'level', price: item.price, shapeId: result.shapeId, success: true });
+          }
         }
       } catch (err) {
-        console.error('❌ Failed to draw level:', level.price, err);
-        results.push({ price: level.price, success: false, error: err.message });
+        const identifier = item.type === 'zone' ? `zone at ${item.midPrice}` : `level at ${item.price}`;
+        console.error(`❌ Failed to draw ${identifier}:`, err);
+        results.push({
+          type: item.type || 'level',
+          price: item.price || item.midPrice,
+          success: false,
+          error: err.message
+        });
       }
     }
 
@@ -180,6 +220,8 @@ if (window !== window.top) {
       success: true,
       drawn: results.filter(r => r.success).length,
       failed: results.filter(r => !r.success).length,
+      zones: results.filter(r => r.type === 'zone' && r.success).length,
+      levels: results.filter(r => r.type === 'level' && r.success).length,
       results
     };
   }

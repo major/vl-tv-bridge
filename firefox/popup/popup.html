@@ -100,6 +100,22 @@
             <option value="20">20 years</option>
           </select>
         </div>
+        <div class="setting-row">
+          <label class="toggle">
+            <input type="checkbox" id="clustering-toggle" checked>
+            <span>Cluster nearby levels</span>
+          </label>
+        </div>
+        <div class="setting-row" id="threshold-row">
+          <label for="threshold-select">Cluster threshold:</label>
+          <select id="threshold-select" class="setting-select">
+            <option value="0.5">0.5% (tight)</option>
+            <option value="1.0" selected>1.0% (default)</option>
+            <option value="1.5">1.5%</option>
+            <option value="2.0">2.0% (loose)</option>
+            <option value="3.0">3.0% (very loose)</option>
+          </select>
+        </div>
       </div>
     </section>
 

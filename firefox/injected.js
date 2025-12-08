@@ -205,6 +205,61 @@
   }
 
   /**
+   * Draw a zone (clustered levels) as a thick horizontal line at the midpoint
+   */
+  async function drawZone(data) {
+    const chart = getChartApi();
+    if (!chart) {
+      const error = 'TradingView chart API not available';
+      console.error('❌', error);
+      throw new Error(error);
+    }
+
+    const { highPrice, lowPrice, midPrice, label, options = {} } = data;
+
+    // Use thick line at midpoint to represent the zone
+    const overrides = {
+      linecolor: options.linecolor || '#02A9DE',
+      linewidth: options.linewidth || 4, // Thick line for zones (vs 2 for single levels)
+      linestyle: options.linestyle || 0, // Solid
+      showLabel: true,
+      textcolor: options.textcolor || options.linecolor || '#02A9DE',
+      fontsize: options.fontsize || 12,
+      bold: options.bold !== false,
+      horzLabelsAlign: options.horzLabelsAlign || 'right',
+      vertLabelsAlign: options.vertLabelsAlign || 'middle',
+      ...options
+    };
+
+    const shapeConfig = {
+      shape: 'horizontal_line',
+      text: label || `VL Zone [${lowPrice.toFixed(2)}-${highPrice.toFixed(2)}]`,
+      overrides: overrides
+    };
+
+    console.log(`📐 INJECTED: Creating zone at $${midPrice.toFixed(2)} (range: $${lowPrice.toFixed(2)}-$${highPrice.toFixed(2)}) with label "${shapeConfig.text}"`);
+
+    try {
+      const shapeId = await chart.createShape(
+        { price: midPrice },
+        shapeConfig
+      );
+
+      if (!shapeId) {
+        console.warn('⚠️ createShape returned falsy value:', shapeId);
+        throw new Error('createShape returned no ID');
+      }
+
+      console.log(`✅ Drew zone at $${midPrice.toFixed(2)}, ID: ${shapeId}`);
+      return { shapeId, highPrice, lowPrice, midPrice };
+    } catch (err) {
+      console.error('❌ Failed to draw zone at', midPrice);
+      console.error('❌ Error:', err.message || err);
+      throw err;
+    }
+  }
+
+  /**
    * Remove a shape from the chart
    */
   async function removeShape(data) {
@@ -306,6 +361,10 @@
 
         case 'DRAW_LINE':
           result = await drawLine(data);
+          break;
+
+        case 'DRAW_ZONE':
+          result = await drawZone(data);
           break;
 
         case 'REMOVE_SHAPE':

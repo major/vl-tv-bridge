@@ -48,7 +48,10 @@ const elements = {
   addBtn: document.getElementById('add-btn'),
   debugToggle: document.getElementById('debug-toggle'),
   levelCountSelect: document.getElementById('level-count-select'),
-  yearRangeSelect: document.getElementById('year-range-select')
+  yearRangeSelect: document.getElementById('year-range-select'),
+  clusteringToggle: document.getElementById('clustering-toggle'),
+  thresholdSelect: document.getElementById('threshold-select'),
+  thresholdRow: document.getElementById('threshold-row')
 };
 
 // State
@@ -78,10 +81,15 @@ async function init() {
   ]);
 
   // Load settings
-  const stored = await browser.storage.local.get(['debugMode', 'levelCount', 'yearRange']);
+  const stored = await browser.storage.local.get([
+    'debugMode', 'levelCount', 'yearRange', 'clusteringEnabled', 'clusterThreshold'
+  ]);
   elements.debugToggle.checked = stored.debugMode || false;
   elements.levelCountSelect.value = stored.levelCount ?? 10;
   elements.yearRangeSelect.value = stored.yearRange ?? 5;
+  elements.clusteringToggle.checked = stored.clusteringEnabled !== false; // Default true
+  elements.thresholdSelect.value = stored.clusterThreshold ?? 1.0;
+  updateThresholdVisibility();
 
   // Set up event listeners
   setupEventListeners();
@@ -485,6 +493,33 @@ async function handleYearRangeChange() {
 }
 
 /**
+ * Handle clustering toggle change
+ */
+async function handleClusteringToggle() {
+  const enabled = elements.clusteringToggle.checked;
+  await browser.storage.local.set({ clusteringEnabled: enabled });
+  updateThresholdVisibility();
+  console.log('⚙️ Clustering enabled:', enabled);
+}
+
+/**
+ * Handle cluster threshold selection change
+ */
+async function handleThresholdChange() {
+  const threshold = parseFloat(elements.thresholdSelect.value);
+  await browser.storage.local.set({ clusterThreshold: threshold });
+  console.log('⚙️ Cluster threshold set to:', threshold + '%');
+}
+
+/**
+ * Update threshold row visibility based on clustering toggle
+ */
+function updateThresholdVisibility() {
+  elements.thresholdRow.style.display =
+    elements.clusteringToggle.checked ? 'flex' : 'none';
+}
+
+/**
  * Toggle collapsible sections
  */
 function toggleSection(e) {
@@ -515,6 +550,8 @@ function setupEventListeners() {
   elements.debugToggle.addEventListener('change', toggleDebug);
   elements.levelCountSelect.addEventListener('change', handleLevelCountChange);
   elements.yearRangeSelect.addEventListener('change', handleYearRangeChange);
+  elements.clusteringToggle.addEventListener('change', handleClusteringToggle);
+  elements.thresholdSelect.addEventListener('change', handleThresholdChange);
 
   // Collapsible sections
   document.querySelectorAll('.section-header').forEach(header => {

@@ -497,17 +497,31 @@ async function fetchAndDraw(symbol, tabId = null, drawOptions = {}) {
   // Step 2: If tabId provided, draw the levels
   if (tabId) {
     try {
-      // Format labels for display
-      const levelsWithLabels = fetchResult.levels.map(level => ({
-        ...level,
-        label: formatLevelLabel(level)
+      // Get clustering settings
+      const settings = await browser.storage.local.get(['clusteringEnabled', 'clusterThreshold']);
+      const clusteringEnabled = settings.clusteringEnabled !== false; // Default true
+      const threshold = settings.clusterThreshold ?? 1.0;
+
+      // Apply clustering if enabled
+      let drawables;
+      if (clusteringEnabled && threshold > 0) {
+        drawables = clusterLevels(fetchResult.levels, threshold);
+        console.log(`🔗 BACKGROUND: Clustered ${fetchResult.levels.length} levels into ${drawables.length} items (threshold: ${threshold}%)`);
+      } else {
+        drawables = fetchResult.levels.map(l => ({ type: 'level', ...l }));
+      }
+
+      // Add appropriate labels to each item
+      const drawablesWithLabels = drawables.map(item => ({
+        ...item,
+        label: item.type === 'zone' ? formatZoneLabel(item) : formatLevelLabel(item)
       }));
 
-      console.log(`🎨 BACKGROUND: Drawing ${levelsWithLabels.length} levels on tab ${tabId}`);
+      console.log(`🎨 BACKGROUND: Drawing ${drawablesWithLabels.length} items on tab ${tabId}`);
 
       const drawResponse = await browser.tabs.sendMessage(tabId, {
         type: 'DRAW_LEVELS',
-        levels: levelsWithLabels,
+        levels: drawablesWithLabels,
         options: {
           color: drawOptions.color || '#02A9DE',
           width: drawOptions.width || 2,
@@ -519,7 +533,9 @@ async function fetchAndDraw(symbol, tabId = null, drawOptions = {}) {
 
       return {
         ...fetchResult,
-        drawResult: drawResponse
+        drawResult: drawResponse,
+        clustered: clusteringEnabled,
+        clusterCount: drawables.filter(d => d.type === 'zone').length
       };
     } catch (err) {
       console.error('❌ BACKGROUND: Failed to draw levels:', err);
@@ -559,6 +575,103 @@ function formatDollars(amount) {
   if (amount >= 1e6) return `$${(amount / 1e6).toFixed(0)}M`;
   if (amount >= 1e3) return `$${(amount / 1e3).toFixed(0)}K`;
   return `$${amount.toFixed(0)}`;
+}
+
+/**
+ * Cluster nearby price levels into zones based on percentage threshold
+ *
+ * @param {Array} levels - Array of level objects with price property
+ * @param {number} thresholdPercent - Clustering threshold (e.g., 1.0 for 1%)
+ * @returns {Array} Array of level and zone objects
+ */
+function clusterLevels(levels, thresholdPercent) {
+  if (!levels || levels.length === 0) return [];
+  if (thresholdPercent <= 0) {
+    // No clustering - mark all as single levels
+    return levels.map(l => ({ type: 'level', ...l }));
+  }
+
+  // Sort by price ascending
+  const sorted = [...levels].sort((a, b) => a.price - b.price);
+
+  const clusters = [];
+  let currentCluster = [sorted[0]];
+
+  for (let i = 1; i < sorted.length; i++) {
+    const level = sorted[i];
+    const clusterHigh = Math.max(...currentCluster.map(l => l.price));
+
+    // Calculate threshold relative to cluster's high price
+    const threshold = clusterHigh * (thresholdPercent / 100);
+
+    if ((level.price - clusterHigh) <= threshold) {
+      // Level is close enough - add to current cluster
+      currentCluster.push(level);
+    } else {
+      // Level is too far - finalize current cluster, start new one
+      clusters.push(finalizeCluster(currentCluster));
+      currentCluster = [level];
+    }
+  }
+
+  // Don't forget the last cluster
+  clusters.push(finalizeCluster(currentCluster));
+
+  return clusters;
+}
+
+/**
+ * Finalize a cluster into either a single level or a zone
+ */
+function finalizeCluster(levels) {
+  if (levels.length === 1) {
+    return { type: 'level', ...levels[0] };
+  }
+
+  const prices = levels.map(l => l.price);
+  const ranks = levels.map(l => l.rank).filter(Boolean).sort((a, b) => a - b);
+  const totalDollars = levels.reduce((sum, l) => sum + (l.dollars || 0), 0);
+  const highPrice = Math.max(...prices);
+  const lowPrice = Math.min(...prices);
+
+  return {
+    type: 'zone',
+    highPrice,
+    lowPrice,
+    midPrice: (highPrice + lowPrice) / 2,
+    levels,
+    aggregated: {
+      rankRange: ranks.length > 0 ? [ranks[0], ranks[ranks.length - 1]] : [null, null],
+      totalDollars,
+      levelCount: levels.length,
+      avgDollars: totalDollars / levels.length
+    }
+  };
+}
+
+/**
+ * Format zone label for TradingView line
+ * e.g., "VL #1-3 $2.9B"
+ */
+function formatZoneLabel(zone) {
+  const { aggregated } = zone;
+  const parts = ['VL'];
+
+  // Rank range
+  if (aggregated.rankRange[0] !== null) {
+    if (aggregated.rankRange[0] === aggregated.rankRange[1]) {
+      parts.push(`#${aggregated.rankRange[0]}`);
+    } else {
+      parts.push(`#${aggregated.rankRange[0]}-${aggregated.rankRange[1]}`);
+    }
+  }
+
+  // Total dollar volume
+  if (aggregated.totalDollars > 0) {
+    parts.push(formatDollars(aggregated.totalDollars));
+  }
+
+  return parts.join(' ');
 }
 
 /**

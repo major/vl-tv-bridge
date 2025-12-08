@@ -2,6 +2,13 @@
 
 All notable changes to VL-TV Bridge.
 
+
+## [1.2.0](///compare/v1.1.1...v1.2.0) (2025-12-08)
+
+### Features
+
+* add individual trade circles 6865eba
+
 ## [1.1.1](https://github.com/major/vl-tv-bridge/compare/v1.1.0...v1.1.1) (2025-12-08)
 
 ### ✨ Features

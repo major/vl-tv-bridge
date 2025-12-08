@@ -219,6 +219,10 @@ function extractLevels(url, items) {
  * Try to extract symbol from API URL
  */
 function extractSymbolFromUrl(url) {
+  // Handle direct-fetch:TICKER format (used by fetchVlLevels)
+  const directFetchMatch = url.match(/^direct-fetch:([A-Z0-9]+)$/i);
+  if (directFetchMatch) return directFetchMatch[1].toUpperCase();
+
   // Common patterns: /api/levels/AAPL, /api?symbol=AAPL, etc.
   const patterns = [
     /\/([A-Z]{1,5})(?:\/|\?|$)/,
@@ -261,7 +265,8 @@ function handleMessage(message, sender, sendResponse) {
 
     case 'FETCH_VL_LEVELS':
       // Fetch levels directly from VL API for a specific symbol
-      fetchVlLevels(message.symbol)
+      // If tabId is provided, also draw the levels on that tab
+      fetchAndDraw(message.symbol, message.tabId, message.drawOptions)
         .then(result => sendResponse(result))
         .catch(err => sendResponse({ success: false, error: err.message }));
       return true; // Async response
@@ -475,6 +480,85 @@ async function fetchVlLevels(ticker) {
     console.error(`❌ Failed to fetch VL levels for ${ticker}:`, err);
     throw err;
   }
+}
+
+/**
+ * Fetch VL levels and optionally draw them on a tab
+ * This ensures drawing happens even if the popup closes during fetch
+ */
+async function fetchAndDraw(symbol, tabId = null, drawOptions = {}) {
+  // Step 1: Fetch the levels
+  const fetchResult = await fetchVlLevels(symbol);
+
+  if (!fetchResult.success || fetchResult.levels.length === 0) {
+    return fetchResult;
+  }
+
+  // Step 2: If tabId provided, draw the levels
+  if (tabId) {
+    try {
+      // Format labels for display
+      const levelsWithLabels = fetchResult.levels.map(level => ({
+        ...level,
+        label: formatLevelLabel(level)
+      }));
+
+      console.log(`🎨 BACKGROUND: Drawing ${levelsWithLabels.length} levels on tab ${tabId}`);
+
+      const drawResponse = await browser.tabs.sendMessage(tabId, {
+        type: 'DRAW_LEVELS',
+        levels: levelsWithLabels,
+        options: {
+          color: drawOptions.color || '#02A9DE',
+          width: drawOptions.width || 2,
+          style: drawOptions.style || 0
+        }
+      });
+
+      console.log(`🎨 BACKGROUND: Draw complete:`, drawResponse);
+
+      return {
+        ...fetchResult,
+        drawResult: drawResponse
+      };
+    } catch (err) {
+      console.error('❌ BACKGROUND: Failed to draw levels:', err);
+      // Return fetch result even if draw fails - levels are still cached
+      return {
+        ...fetchResult,
+        drawResult: { success: false, error: err.message }
+      };
+    }
+  }
+
+  return fetchResult;
+}
+
+/**
+ * Format level label for TradingView line (e.g., "VL #1 $1.6B")
+ */
+function formatLevelLabel(level) {
+  const parts = ['VL'];
+
+  if (level.rank) {
+    parts.push(`#${level.rank}`);
+  }
+
+  if (level.dollars) {
+    parts.push(formatDollars(level.dollars));
+  }
+
+  return parts.join(' ');
+}
+
+/**
+ * Format large dollar amounts (e.g., 1.6B, 250M)
+ */
+function formatDollars(amount) {
+  if (amount >= 1e9) return `$${(amount / 1e9).toFixed(1)}B`;
+  if (amount >= 1e6) return `$${(amount / 1e6).toFixed(0)}M`;
+  if (amount >= 1e3) return `$${(amount / 1e3).toFixed(0)}K`;
+  return `$${amount.toFixed(0)}`;
 }
 
 /**

@@ -268,53 +268,29 @@ async function fetchAndDraw() {
   elements.status.textContent = `Fetching levels for ${currentSymbol}...`;
 
   try {
-    // Step 1: Fetch levels from VL API
-    const fetchResponse = await browser.runtime.sendMessage({
+    // Send fetch request with tabId - background script handles drawing
+    // This ensures draw happens even if popup closes during fetch
+    const response = await browser.runtime.sendMessage({
       type: 'FETCH_VL_LEVELS',
-      symbol: currentSymbol
-    });
-
-    console.log('Fetch response:', fetchResponse);
-
-    if (!fetchResponse.success) {
-      throw new Error(fetchResponse.error || 'Failed to fetch levels');
-    }
-
-    if (fetchResponse.levels.length === 0) {
-      elements.status.textContent = `No VL levels found for ${currentSymbol}`;
-      elements.fetchDrawBtn.textContent = '🚀 Fetch & Draw VL Levels';
-      elements.fetchDrawBtn.disabled = false;
-      return;
-    }
-
-    elements.fetchDrawBtn.textContent = '⏳ Drawing...';
-    elements.status.textContent = `Drawing ${fetchResponse.levels.length} levels...`;
-
-    // Step 2: Prepare levels with labels
-    const levelsWithLabels = fetchResponse.levels.map(level => ({
-      ...level,
-      label: formatLevelLabel(level)
-    }));
-
-    console.log(`🎯 POPUP: Sending ${levelsWithLabels.length} levels to draw:`, levelsWithLabels.map(l => l.price));
-
-    // Step 3: Draw on chart
-    const drawResponse = await browser.tabs.sendMessage(currentTabId, {
-      type: 'DRAW_LEVELS',
-      levels: levelsWithLabels,
-      options: {
+      symbol: currentSymbol,
+      tabId: currentTabId,
+      drawOptions: {
         color: '#02A9DE',
         width: 2,
         style: 0
       }
     });
 
-    console.log('Draw response:', drawResponse);
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to fetch levels');
+    }
 
-    if (drawResponse?.success) {
-      elements.status.textContent = `✅ Drew ${drawResponse.drawn} levels for ${currentSymbol}`;
+    if (response.levels.length === 0) {
+      elements.status.textContent = `No VL levels found for ${currentSymbol}`;
+    } else if (response.drawResult?.success) {
+      elements.status.textContent = `✅ Drew ${response.drawResult.drawn} levels for ${currentSymbol}`;
     } else {
-      elements.status.textContent = `⚠️ Partial draw: ${drawResponse?.drawn || 0} levels`;
+      elements.status.textContent = `⚠️ Fetched ${response.count} levels but draw failed`;
     }
 
     // Reload cached levels

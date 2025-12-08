@@ -29,6 +29,18 @@ header h1 {
   margin-bottom: 4px;
 }
 
+.header-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.version {
+  font-size: 10px;
+  color: #666;
+  font-weight: 400;
+}
+
 .status {
   font-size: 11px;
   color: #888;
@@ -179,6 +191,13 @@ header h1 {
   font-size: 15px;
   width: 100%;
   margin-top: 8px;
+}
+
+.btn.secondary.large {
+  padding: 12px 20px;
+  font-size: 14px;
+  width: 100%;
+  margin-top: 4px;
 }
 
 .btn.secondary {

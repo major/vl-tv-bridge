@@ -32,11 +32,13 @@ function formatLevelLabel(level) {
 
 // DOM elements
 const elements = {
+  version: document.getElementById('version'),
   status: document.getElementById('status'),
   tvStatus: document.getElementById('tv-status'),
   vlStatus: document.getElementById('vl-status'),
   chartSymbol: document.getElementById('chart-symbol'),
   fetchDrawBtn: document.getElementById('fetch-draw-btn'),
+  fetchTradesBtn: document.getElementById('fetch-trades-btn'),
   clearChartBtn: document.getElementById('clear-chart-btn'),
   refreshBtn: document.getElementById('refresh-btn'),
   levelCount: document.getElementById('level-count'),
@@ -48,6 +50,7 @@ const elements = {
   addBtn: document.getElementById('add-btn'),
   debugToggle: document.getElementById('debug-toggle'),
   levelCountSelect: document.getElementById('level-count-select'),
+  tradeCountSelect: document.getElementById('trade-count-select'),
   yearRangeSelect: document.getElementById('year-range-select'),
   clusteringToggle: document.getElementById('clustering-toggle'),
   thresholdSelect: document.getElementById('threshold-select'),
@@ -67,6 +70,10 @@ let currentTabId = null;
 async function init() {
   console.log('🎛️ Popup initialized');
 
+  // Display version from manifest
+  const manifest = browser.runtime.getManifest();
+  elements.version.textContent = `v${manifest.version}`;
+
   // Get current tab
   const tabs = await browser.tabs.query({ active: true, currentWindow: true });
   currentTabId = tabs[0]?.id;
@@ -82,10 +89,11 @@ async function init() {
 
   // Load settings
   const stored = await browser.storage.local.get([
-    'debugMode', 'levelCount', 'yearRange', 'clusteringEnabled', 'clusterThreshold'
+    'debugMode', 'levelCount', 'tradeCount', 'yearRange', 'clusteringEnabled', 'clusterThreshold'
   ]);
   elements.debugToggle.checked = stored.debugMode || false;
   elements.levelCountSelect.value = stored.levelCount ?? 10;
+  elements.tradeCountSelect.value = stored.tradeCount ?? 5;
   elements.yearRangeSelect.value = stored.yearRange ?? 5;
   elements.clusteringToggle.checked = stored.clusteringEnabled !== false; // Default true
   elements.thresholdSelect.value = stored.clusterThreshold ?? 1.0;
@@ -194,6 +202,7 @@ function setVlStatus(state, text) {
 function updateButtonStates() {
   const canFetchDraw = tvReady && vlReady && currentSymbol;
   elements.fetchDrawBtn.disabled = !canFetchDraw;
+  elements.fetchTradesBtn.disabled = !canFetchDraw;
 
   elements.clearChartBtn.disabled = !tvReady;
 
@@ -311,6 +320,61 @@ async function fetchAndDraw() {
 
   elements.fetchDrawBtn.textContent = '🚀 Fetch & Draw VL Levels';
   elements.fetchDrawBtn.disabled = false;
+  updateButtonStates();
+}
+
+/**
+ * Fetch VL large trades and draw circles on chart
+ */
+async function fetchAndDrawTrades() {
+  if (!currentSymbol) {
+    elements.status.textContent = '❌ No symbol detected';
+    return;
+  }
+
+  elements.fetchTradesBtn.disabled = true;
+  elements.fetchTradesBtn.textContent = '⏳ Fetching trades...';
+  elements.status.textContent = `Fetching large trades for ${currentSymbol}...`;
+
+  try {
+    // Get trade count setting
+    const stored = await browser.storage.local.get(['tradeCount']);
+    const tradeCount = stored.tradeCount ?? 5;
+
+    // Send fetch request with tabId - background script handles drawing
+    const response = await browser.runtime.sendMessage({
+      type: 'FETCH_VL_TRADES',
+      symbol: currentSymbol,
+      tabId: currentTabId,
+      tradeCount: tradeCount
+    });
+
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to fetch trades');
+    }
+
+    if (response.trades.length === 0) {
+      elements.status.textContent = `No large trades found for ${currentSymbol}`;
+    } else if (response.drawResult?.success) {
+      const dpCount = response.drawResult.darkPoolCount || 0;
+      const litCount = response.drawResult.litCount || 0;
+      const offChartCount = response.drawResult.offChartCount || 0;
+      let statusText = `✅ Drew ${response.drawResult.drawn} trades (🔵 ${litCount} lit, 🟠 ${dpCount} dark pool)`;
+      if (offChartCount > 0) {
+        statusText += ` · ← ${offChartCount} historical`;
+      }
+      elements.status.textContent = statusText;
+    } else {
+      elements.status.textContent = `⚠️ Fetched ${response.count} trades but draw failed`;
+    }
+
+  } catch (err) {
+    console.error('Fetch trades error:', err);
+    elements.status.textContent = `❌ ${err.message}`;
+  }
+
+  elements.fetchTradesBtn.textContent = '⭕ Fetch & Draw Large Trades';
+  elements.fetchTradesBtn.disabled = false;
   updateButtonStates();
 }
 
@@ -484,6 +548,15 @@ async function handleLevelCountChange() {
 }
 
 /**
+ * Handle trade count selection change
+ */
+async function handleTradeCountChange() {
+  const tradeCount = parseInt(elements.tradeCountSelect.value, 10);
+  await browser.storage.local.set({ tradeCount });
+  console.log('⚙️ Trade count set to:', tradeCount);
+}
+
+/**
  * Handle year range selection change
  */
 async function handleYearRangeChange() {
@@ -542,6 +615,7 @@ function toggleSection(e) {
  */
 function setupEventListeners() {
   elements.fetchDrawBtn.addEventListener('click', fetchAndDraw);
+  elements.fetchTradesBtn.addEventListener('click', fetchAndDrawTrades);
   elements.clearChartBtn.addEventListener('click', clearChart);
   elements.refreshBtn.addEventListener('click', refresh);
   elements.drawCachedBtn.addEventListener('click', drawCachedLevels);
@@ -549,6 +623,7 @@ function setupEventListeners() {
   elements.addBtn.addEventListener('click', addManualLevel);
   elements.debugToggle.addEventListener('change', toggleDebug);
   elements.levelCountSelect.addEventListener('change', handleLevelCountChange);
+  elements.tradeCountSelect.addEventListener('change', handleTradeCountChange);
   elements.yearRangeSelect.addEventListener('change', handleYearRangeChange);
   elements.clusteringToggle.addEventListener('change', handleClusteringToggle);
   elements.thresholdSelect.addEventListener('change', handleThresholdChange);

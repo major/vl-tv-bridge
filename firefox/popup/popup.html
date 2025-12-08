@@ -10,7 +10,10 @@
 <body>
   <div class="container">
     <header>
-      <h1>📊 VL → TV Bridge</h1>
+      <div class="header-row">
+        <h1>📊 VL → TV Bridge</h1>
+        <span id="version" class="version"></span>
+      </div>
       <div id="status" class="status"></div>
     </header>
 
@@ -30,6 +33,10 @@
 
       <button id="fetch-draw-btn" class="btn primary large" disabled>
         🚀 Fetch & Draw VL Levels
+      </button>
+
+      <button id="fetch-trades-btn" class="btn secondary large" disabled>
+        ⭕ Fetch & Draw Large Trades
       </button>
 
       <div class="button-row">
@@ -86,6 +93,15 @@
           <select id="level-count-select" class="setting-select">
             <option value="5">5 levels</option>
             <option value="10" selected>10 levels</option>
+          </select>
+        </div>
+        <div class="setting-row">
+          <label for="trade-count-select">Number of large trades:</label>
+          <select id="trade-count-select" class="setting-select">
+            <option value="5" selected>5 trades</option>
+            <option value="10">10 trades</option>
+            <option value="15">15 trades</option>
+            <option value="20">20 trades</option>
           </select>
         </div>
         <div class="setting-row">

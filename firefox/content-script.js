@@ -57,6 +57,12 @@ if (window !== window.top) {
           .catch(err => sendResponse({ success: false, error: err.message }));
         return true;
 
+      case 'DRAW_CIRCLES':
+        drawCircles(message.trades, message.options)
+          .then(result => sendResponse(result))
+          .catch(err => sendResponse({ success: false, error: err.message }));
+        return true;
+
       case 'CHECK_TV_READY':
         checkTradingViewReady()
           .then(ready => sendResponse({ ready }))
@@ -143,12 +149,12 @@ if (window !== window.top) {
     const zoneCount = levels.filter(l => l.type === 'zone').length;
     console.log(`🎯 CONTENT: drawLevels called with ${levelCount} levels and ${zoneCount} zones`);
 
-    // Clear existing VL shapes first
+    // Clear existing VL lines first (keeps circles intact)
     try {
-      const clearResult = await sendToInjected('CLEAR_VL_SHAPES');
-      console.log(`🧹 Cleared ${clearResult.removed} existing VL shapes`);
+      const clearResult = await sendToInjected('CLEAR_VL_LINES');
+      console.log(`🧹 Cleared ${clearResult.removed} existing VL lines`);
     } catch (err) {
-      console.warn('Could not clear existing VL shapes:', err);
+      console.warn('Could not clear existing VL lines:', err);
     }
 
     const results = [];
@@ -222,6 +228,75 @@ if (window !== window.top) {
       failed: results.filter(r => !r.success).length,
       zones: results.filter(r => r.type === 'zone' && r.success).length,
       levels: results.filter(r => r.type === 'level' && r.success).length,
+      results
+    };
+  }
+
+  /**
+   * Draw trade circles on the chart
+   * Each circle represents a large trade with position (price, time) and rank label
+   */
+  async function drawCircles(trades, options = {}) {
+    console.log(`🔵 CONTENT: drawCircles called with ${trades.length} trades`);
+
+    // Clear existing VL circles first (keeps horizontal lines intact)
+    try {
+      const clearResult = await sendToInjected('CLEAR_VL_CIRCLES');
+      console.log(`🧹 Cleared ${clearResult.removed} existing VL circles`);
+    } catch (err) {
+      console.warn('Could not clear existing VL circles:', err);
+    }
+
+    const results = [];
+
+    for (const trade of trades) {
+      try {
+        const result = await sendToInjected('DRAW_CIRCLE', {
+          price: trade.price,
+          timestamp: trade.timestamp,
+          rank: trade.rank,
+          darkPool: trade.darkPool,
+          options: options
+        });
+
+        if (result.shapeId) {
+          drawnShapeIds.push(result.shapeId);
+          results.push({
+            price: trade.price,
+            timestamp: trade.timestamp,
+            rank: trade.rank,
+            darkPool: trade.darkPool,
+            shapeId: result.shapeId,
+            isOffChart: result.isOffChart || false,
+            success: true
+          });
+        }
+      } catch (err) {
+        console.error(`❌ Failed to draw circle for trade #${trade.rank}:`, err);
+        results.push({
+          price: trade.price,
+          rank: trade.rank,
+          success: false,
+          error: err.message
+        });
+      }
+    }
+
+    // Save drawn shape IDs for cleanup
+    await browser.storage.local.set({ drawnShapeIds });
+
+    const successCount = results.filter(r => r.success).length;
+    const dpCount = results.filter(r => r.success && r.darkPool).length;
+    const litCount = successCount - dpCount;
+    const offChartCount = results.filter(r => r.success && r.isOffChart).length;
+
+    return {
+      success: true,
+      drawn: successCount,
+      failed: results.filter(r => !r.success).length,
+      darkPoolCount: dpCount,
+      litCount: litCount,
+      offChartCount: offChartCount,
       results
     };
   }

@@ -15,6 +15,7 @@ const VL_API_PATTERNS = [
 
 // 📦 State
 let tradeLevels = new Map(); // symbol -> levels[]
+let largeTrades = new Map(); // symbol -> trades[] (for circles)
 let debugMode = true; // Log all intercepted requests initially
 
 /**
@@ -267,6 +268,14 @@ function handleMessage(message, sender, sendResponse) {
       // Fetch levels directly from VL API for a specific symbol
       // If tabId is provided, also draw the levels on that tab
       fetchAndDraw(message.symbol, message.tabId, message.drawOptions)
+        .then(result => sendResponse(result))
+        .catch(err => sendResponse({ success: false, error: err.message }));
+      return true; // Async response
+
+    case 'FETCH_VL_TRADES':
+      // Fetch large trades from VL API for circles
+      // If tabId is provided, also draw the circles on that tab
+      fetchAndDrawTrades(message.symbol, message.tabId, message.tradeCount)
         .then(result => sendResponse(result))
         .catch(err => sendResponse({ success: false, error: err.message }));
       return true; // Async response
@@ -540,6 +549,218 @@ async function fetchAndDraw(symbol, tabId = null, drawOptions = {}) {
     } catch (err) {
       console.error('❌ BACKGROUND: Failed to draw levels:', err);
       // Return fetch result even if draw fails - levels are still cached
+      return {
+        ...fetchResult,
+        drawResult: { success: false, error: err.message }
+      };
+    }
+  }
+
+  return fetchResult;
+}
+
+/**
+ * Fetch large trades from VolumeLeaders API (for circles)
+ */
+async function fetchVlTrades(ticker, tradeCount = 10) {
+  if (!ticker) {
+    throw new Error('No ticker symbol provided');
+  }
+
+  ticker = ticker.toUpperCase();
+  console.log(`🔍 Fetching VL trades for ${ticker}...`);
+
+  // Get user's settings for date range (same setting as trade levels)
+  const settings = await browser.storage.local.get(['yearRange']);
+  const yearRange = settings.yearRange ?? 5; // Default 5 years
+
+  // Check authentication first
+  const auth = await checkVlAuth();
+  if (!auth.authenticated) {
+    throw new Error('Not logged into VolumeLeaders. Please log in at volumeleaders.com first.');
+  }
+
+  // Build the request body (DataTables format for GetTrades)
+  const now = new Date();
+  const today = now.toISOString().split('T')[0];
+  const startDate = new Date(now.getFullYear() - yearRange, now.getMonth(), now.getDate())
+    .toISOString().split('T')[0];
+
+  const params = new URLSearchParams({
+    'draw': '1',
+    'columns[0][data]': 'FullTimeString24',
+    'columns[0][name]': 'FullTimeString24',
+    'columns[0][searchable]': 'true',
+    'columns[0][orderable]': 'false',
+    'columns[0][search][value]': '',
+    'columns[0][search][regex]': 'false',
+    'columns[1][data]': 'Volume',
+    'columns[1][name]': 'Sh',
+    'columns[1][searchable]': 'true',
+    'columns[1][orderable]': 'false',
+    'columns[1][search][value]': '',
+    'columns[1][search][regex]': 'false',
+    'columns[2][data]': 'Price',
+    'columns[2][name]': 'Price',
+    'columns[2][searchable]': 'true',
+    'columns[2][orderable]': 'false',
+    'columns[2][search][value]': '',
+    'columns[2][search][regex]': 'false',
+    'columns[3][data]': 'Dollars',
+    'columns[3][name]': '$$',
+    'columns[3][searchable]': 'true',
+    'columns[3][orderable]': 'false',
+    'columns[3][search][value]': '',
+    'columns[3][search][regex]': 'false',
+    'columns[4][data]': 'DollarsMultiplier',
+    'columns[4][name]': 'RS',
+    'columns[4][searchable]': 'true',
+    'columns[4][orderable]': 'false',
+    'columns[4][search][value]': '',
+    'columns[4][search][regex]': 'false',
+    'columns[5][data]': 'TradeRank',
+    'columns[5][name]': 'Rank',
+    'columns[5][searchable]': 'true',
+    'columns[5][orderable]': 'false',
+    'columns[5][search][value]': '',
+    'columns[5][search][regex]': 'false',
+    'columns[6][data]': 'LastComparibleTradeDate',
+    'columns[6][name]': 'Last Date',
+    'columns[6][searchable]': 'true',
+    'columns[6][orderable]': 'false',
+    'columns[6][search][value]': '',
+    'columns[6][search][regex]': 'false',
+    'order[0][column]': '0',
+    'order[0][dir]': 'DESC',
+    'start': '0',
+    'length': String(tradeCount),
+    'search[value]': '',
+    'search[regex]': 'false',
+    'Tickers': ticker,
+    'StartDate': startDate,
+    'EndDate': today,
+    'MinVolume': '0',
+    'MaxVolume': '2000000000',
+    'MinPrice': '0',
+    'MaxPrice': '100000',
+    'MinDollars': '500000',
+    'MaxDollars': '300000000000',
+    'Conditions': '-1',
+    'VCD': '0',
+    'RelativeSize': '0',
+    'DarkPools': '-1',
+    'Sweeps': '-1',
+    'LatePrints': '-1',
+    'SignaturePrints': '0',
+    'TradeRank': '-1',
+    'IncludePremarket': '1',
+    'IncludeRTH': '1',
+    'IncludeAH': '1',
+    'IncludeOpening': '1',
+    'IncludeClosing': '1',
+    'IncludePhantom': '1',
+    'IncludeOffsetting': '1',
+    'SectorIndustry': '',
+    'Sort': 'Dollars'
+  });
+
+  try {
+    const response = await fetch('https://www.volumeleaders.com/Trades/GetTrades', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json'
+      },
+      credentials: 'include',
+      body: params.toString()
+    });
+
+    console.log(`📡 VL Trades API response status: ${response.status}`);
+
+    if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
+        throw new Error('VolumeLeaders session expired. Please log in again.');
+      }
+      throw new Error(`VL API error: ${response.status} ${response.statusText}`);
+    }
+
+    const json = await response.json();
+    console.log(`📦 VL API returned ${json.data?.length || 0} trades`);
+
+    if (!json.data || json.data.length === 0) {
+      return {
+        success: true,
+        ticker,
+        trades: [],
+        message: `No large trades found for ${ticker}`
+      };
+    }
+
+    // Parse and store the trades
+    const trades = json.data.map(item => {
+      // Parse .NET JSON date format: "/Date(1748563200000)/"
+      const dateMatch = item.Date?.match(/\/Date\((\d+)\)\//);
+      const timestamp = dateMatch ? parseInt(dateMatch[1], 10) / 1000 : null;
+
+      return {
+        ticker: item.Ticker || ticker,
+        price: item.Price,
+        timestamp, // Unix seconds for TradingView
+        rank: item.TradeRank,
+        dollars: item.Dollars,
+        volume: item.Volume,
+        darkPool: item.DarkPool === 1,
+        fullDateTime: item.FullDateTime,
+        source: `trades-fetch:${ticker}`
+      };
+    });
+
+    // Store in largeTrades map
+    largeTrades.set(ticker, trades);
+    console.log(`✅ Stored ${trades.length} trades for ${ticker}`);
+
+    return {
+      success: true,
+      ticker,
+      trades,
+      count: trades.length
+    };
+
+  } catch (err) {
+    console.error(`❌ Failed to fetch VL trades for ${ticker}:`, err);
+    throw err;
+  }
+}
+
+/**
+ * Fetch VL trades and optionally draw circles on a tab
+ */
+async function fetchAndDrawTrades(symbol, tabId = null, tradeCount = 5) {
+  // Step 1: Fetch the trades
+  const fetchResult = await fetchVlTrades(symbol, tradeCount);
+
+  if (!fetchResult.success || fetchResult.trades.length === 0) {
+    return fetchResult;
+  }
+
+  // Step 2: If tabId provided, draw the circles
+  if (tabId) {
+    try {
+      console.log(`🔵 BACKGROUND: Drawing ${fetchResult.trades.length} trade circles on tab ${tabId}`);
+
+      const drawResponse = await browser.tabs.sendMessage(tabId, {
+        type: 'DRAW_CIRCLES',
+        trades: fetchResult.trades
+      });
+
+      console.log(`🔵 BACKGROUND: Circle draw complete:`, drawResponse);
+
+      return {
+        ...fetchResult,
+        drawResult: drawResponse
+      };
+    } catch (err) {
+      console.error('❌ BACKGROUND: Failed to draw circles:', err);
       return {
         ...fetchResult,
         drawResult: { success: false, error: err.message }

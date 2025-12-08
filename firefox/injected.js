@@ -260,6 +260,119 @@
   }
 
   /**
+   * Get the visible time range on the chart
+   * Returns {from, to} as Unix timestamps (seconds), or null if unavailable
+   */
+  function getVisibleTimeRange() {
+    const chart = getChartApi();
+    if (!chart) return null;
+
+    try {
+      const range = chart.getVisibleRange();
+      if (range && typeof range.from === 'number' && typeof range.to === 'number') {
+        return range;
+      }
+    } catch (e) {
+      console.warn('⚠️ Could not get visible time range:', e);
+    }
+    return null;
+  }
+
+  /**
+   * Draw a circle on the chart for a large trade
+   * Uses createMultipointShape with two points: center and edge
+   *
+   * If the trade's timestamp is before the visible chart range,
+   * draws at the left edge with a "← hist" indicator in the label
+   */
+  async function drawCircle(data) {
+    const chart = getChartApi();
+    if (!chart) {
+      const error = 'TradingView chart API not available';
+      console.error('❌', error);
+      throw new Error(error);
+    }
+
+    const { price, timestamp, rank, darkPool, options = {} } = data;
+
+    // Check if trade is before visible range
+    const visibleRange = getVisibleTimeRange();
+    let effectiveTimestamp = timestamp;
+    let isOffChart = false;
+
+    if (visibleRange && timestamp < visibleRange.from) {
+      // Trade is before visible range - use left edge instead
+      effectiveTimestamp = visibleRange.from;
+      isOffChart = true;
+      console.log(`📍 Trade #${rank} is off-chart (${new Date(timestamp * 1000).toLocaleDateString()} < ${new Date(visibleRange.from * 1000).toLocaleDateString()}), drawing at left edge`);
+    }
+
+    // Calculate radius as percentage of price (default 2%)
+    const radiusPercent = options.radiusPercent || 2;
+    const priceRadius = price * (radiusPercent / 100);
+    const edgePrice = price - priceRadius;
+
+    // Time offset for edge point (7 days in seconds)
+    const timeOffset = 7 * 24 * 60 * 60;
+    const edgeTime = effectiveTimestamp + timeOffset;
+
+    // Colors based on dark pool vs lit exchange
+    // Dark pool = orange, Lit exchange = blue (VL cyan)
+    const borderColor = darkPool
+      ? (options.darkPoolColor || 'rgba(255, 152, 0, 1)')      // Orange
+      : (options.litColor || 'rgba(2, 169, 222, 1)');          // VL Cyan
+    const fillColor = darkPool
+      ? (options.darkPoolFill || 'rgba(255, 152, 0, 0.2)')
+      : (options.litFill || 'rgba(2, 169, 222, 0.2)');
+
+    const overrides = {
+      color: borderColor,
+      backgroundColor: fillColor,
+      fillBackground: true,
+      linewidth: options.linewidth || 2,
+      textColor: options.textColor || '#000000',
+      fontSize: options.fontSize || 14,
+      bold: options.bold !== false,
+      showLabel: true,
+      ...options.overrides
+    };
+
+    // Label includes "←" indicator if trade is off-chart (historical)
+    const labelText = isOffChart ? `VL ←\n#${rank}` : `VL\n#${rank}`;
+
+    const shapeConfig = {
+      shape: 'circle',
+      text: labelText,
+      overrides: overrides
+    };
+
+    // Two points define the circle: center and edge
+    // Uses effectiveTimestamp (may be adjusted to left edge for off-chart trades)
+    const points = [
+      { price: price, time: effectiveTimestamp },      // Center
+      { price: edgePrice, time: edgeTime }             // Edge (defines radius)
+    ];
+
+    console.log(`🔵 INJECTED: Creating circle at $${price.toFixed(2)}, time ${effectiveTimestamp}${isOffChart ? ' (off-chart→left edge)' : ''}, rank #${rank}, darkPool=${darkPool}`);
+
+    try {
+      const shapeId = await chart.createMultipointShape(points, shapeConfig);
+
+      if (!shapeId) {
+        console.warn('⚠️ createMultipointShape returned falsy value:', shapeId);
+        throw new Error('createMultipointShape returned no ID');
+      }
+
+      console.log(`✅ Drew circle at $${price.toFixed(2)}, ID: ${shapeId}${isOffChart ? ' (off-chart)' : ''}`);
+      return { shapeId, price, timestamp, rank, isOffChart };
+    } catch (err) {
+      console.error('❌ Failed to draw circle at', price);
+      console.error('❌ Error:', err.message || err);
+      throw err;
+    }
+  }
+
+  /**
    * Remove a shape from the chart
    */
   async function removeShape(data) {
@@ -337,6 +450,92 @@
   }
 
   /**
+   * Remove only VL horizontal line shapes (not circles)
+   * This clears previous VL levels before drawing new ones
+   */
+  async function clearVlLines() {
+    const chart = getChartApi();
+    if (!chart) return { removed: 0 };
+
+    let removed = 0;
+
+    try {
+      const allShapes = chart.getAllShapes();
+      console.log(`🔍 Checking ${allShapes.length} shapes for VL lines...`);
+
+      for (const shape of allShapes) {
+        try {
+          // Only target horizontal_line shapes
+          if (shape.name !== 'horizontal_line') continue;
+
+          // Get shape properties to check the text
+          const shapeObj = chart.getShapeById(shape.id);
+          if (!shapeObj) continue;
+
+          const props = shapeObj.getProperties ? shapeObj.getProperties() : null;
+          const text = props?.text || '';
+
+          if (text.startsWith('VL')) {
+            chart.removeEntity(shape.id);
+            removed++;
+            console.log(`🗑️ Removed VL line: ${shape.id} ("${text}")`);
+          }
+        } catch (e) {
+          // Shape might not have text or be accessible
+        }
+      }
+    } catch (e) {
+      console.error('Error clearing VL lines:', e);
+    }
+
+    console.log(`✅ Cleared ${removed} VL lines`);
+    return { removed };
+  }
+
+  /**
+   * Remove only VL circle shapes (not horizontal lines)
+   * This clears previous VL circles before drawing new ones
+   */
+  async function clearVlCircles() {
+    const chart = getChartApi();
+    if (!chart) return { removed: 0 };
+
+    let removed = 0;
+
+    try {
+      const allShapes = chart.getAllShapes();
+      console.log(`🔍 Checking ${allShapes.length} shapes for VL circles...`);
+
+      for (const shape of allShapes) {
+        try {
+          // Only target circle shapes
+          if (shape.name !== 'circle') continue;
+
+          // Get shape properties to check the text
+          const shapeObj = chart.getShapeById(shape.id);
+          if (!shapeObj) continue;
+
+          const props = shapeObj.getProperties ? shapeObj.getProperties() : null;
+          const text = props?.text || '';
+
+          if (text.startsWith('VL')) {
+            chart.removeEntity(shape.id);
+            removed++;
+            console.log(`🗑️ Removed VL circle: ${shape.id} ("${text}")`);
+          }
+        } catch (e) {
+          // Shape might not have text or be accessible
+        }
+      }
+    } catch (e) {
+      console.error('Error clearing VL circles:', e);
+    }
+
+    console.log(`✅ Cleared ${removed} VL circles`);
+    return { removed };
+  }
+
+  /**
    * Handle messages from content script
    */
   window.addEventListener('message', async (event) => {
@@ -367,6 +566,10 @@
           result = await drawZone(data);
           break;
 
+        case 'DRAW_CIRCLE':
+          result = await drawCircle(data);
+          break;
+
         case 'REMOVE_SHAPE':
           result = await removeShape(data);
           break;
@@ -377,6 +580,14 @@
 
         case 'CLEAR_VL_SHAPES':
           result = await clearVlShapes();
+          break;
+
+        case 'CLEAR_VL_LINES':
+          result = await clearVlLines();
+          break;
+
+        case 'CLEAR_VL_CIRCLES':
+          result = await clearVlCircles();
           break;
 
         default:

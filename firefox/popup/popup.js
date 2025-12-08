@@ -47,7 +47,8 @@ const elements = {
   priceInput: document.getElementById('price-input'),
   addBtn: document.getElementById('add-btn'),
   debugToggle: document.getElementById('debug-toggle'),
-  levelCountSelect: document.getElementById('level-count-select')
+  levelCountSelect: document.getElementById('level-count-select'),
+  yearRangeSelect: document.getElementById('year-range-select')
 };
 
 // State
@@ -77,9 +78,10 @@ async function init() {
   ]);
 
   // Load settings
-  const stored = await browser.storage.local.get(['debugMode', 'levelCount']);
+  const stored = await browser.storage.local.get(['debugMode', 'levelCount', 'yearRange']);
   elements.debugToggle.checked = stored.debugMode || false;
   elements.levelCountSelect.value = stored.levelCount ?? 10;
+  elements.yearRangeSelect.value = stored.yearRange ?? 5;
 
   // Set up event listeners
   setupEventListeners();
@@ -498,6 +500,15 @@ async function handleLevelCountChange() {
 }
 
 /**
+ * Handle year range selection change
+ */
+async function handleYearRangeChange() {
+  const yearRange = parseInt(elements.yearRangeSelect.value, 10);
+  await browser.storage.local.set({ yearRange });
+  console.log('⚙️ Year range set to:', yearRange);
+}
+
+/**
  * Toggle collapsible sections
  */
 function toggleSection(e) {
@@ -527,6 +538,7 @@ function setupEventListeners() {
   elements.addBtn.addEventListener('click', addManualLevel);
   elements.debugToggle.addEventListener('change', toggleDebug);
   elements.levelCountSelect.addEventListener('change', handleLevelCountChange);
+  elements.yearRangeSelect.addEventListener('change', handleYearRangeChange);
 
   // Collapsible sections
   document.querySelectorAll('.section-header').forEach(header => {

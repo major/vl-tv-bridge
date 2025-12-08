@@ -336,9 +336,10 @@ async function fetchVlLevels(ticker) {
   ticker = ticker.toUpperCase();
   console.log(`🔍 Fetching VL levels for ${ticker}...`);
 
-  // Get user's level count preference
-  const settings = await browser.storage.local.get('levelCount');
+  // Get user's settings
+  const settings = await browser.storage.local.get(['levelCount', 'yearRange']);
   const levelCount = String(settings.levelCount ?? 10);
+  const yearRange = settings.yearRange ?? 5;
 
   // Check authentication first
   const auth = await checkVlAuth();
@@ -349,7 +350,7 @@ async function fetchVlLevels(ticker) {
   // Build the request body (DataTables format)
   const now = new Date();
   const today = now.toISOString().split('T')[0];
-  const fiveYearsAgo = new Date(now.getFullYear() - 5, now.getMonth(), now.getDate())
+  const startDate = new Date(now.getFullYear() - yearRange, now.getMonth(), now.getDate())
     .toISOString().split('T')[0];
   const params = new URLSearchParams({
     'draw': '1',
@@ -414,7 +415,7 @@ async function fetchVlLevels(ticker) {
     'MaxPrice': '100000',
     'MinDollars': '500000',
     'MaxDollars': '300000000000',
-    'MinDate': fiveYearsAgo,
+    'MinDate': startDate,
     'MaxDate': today,
     'VCD': '0',
     'RelativeSize': '0',

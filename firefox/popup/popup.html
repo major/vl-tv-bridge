@@ -1,10 +1,12 @@
 <!DOCTYPE html>
 <html>
+
 <head>
   <meta charset="utf-8">
   <title>VL TradingView Bridge</title>
   <link rel="stylesheet" href="popup.css">
 </head>
+
 <body>
   <div class="container">
     <header>
@@ -46,7 +48,7 @@
         Cached Levels <span id="level-count" class="badge">0</span>
         <span class="chevron">▼</span>
       </h2>
-      <div id="levels-content" class="section-content">
+      <div id="levels-content" class="section-content collapsed">
         <div id="levels-list" class="levels-list">
           <div class="empty">No levels cached yet.</div>
         </div>
@@ -72,6 +74,23 @@
       </div>
     </section>
 
+    <!-- Settings Section -->
+    <section class="section collapsible">
+      <h2 class="section-header" data-toggle="settings-content">
+        ⚙️ Settings
+        <span class="chevron">▼</span>
+      </h2>
+      <div id="settings-content" class="section-content collapsed">
+        <div class="setting-row">
+          <label for="level-count-select">Number of VL levels:</label>
+          <select id="level-count-select" class="setting-select">
+            <option value="5">5 levels</option>
+            <option value="10" selected>10 levels</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
     <footer>
       <label class="toggle">
         <input type="checkbox" id="debug-toggle">
@@ -82,4 +101,5 @@
 
   <script src="popup.js"></script>
 </body>
+
 </html>

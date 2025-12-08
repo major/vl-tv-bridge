@@ -336,6 +336,10 @@ async function fetchVlLevels(ticker) {
   ticker = ticker.toUpperCase();
   console.log(`🔍 Fetching VL levels for ${ticker}...`);
 
+  // Get user's level count preference
+  const settings = await browser.storage.local.get('levelCount');
+  const levelCount = String(settings.levelCount ?? 10);
+
   // Check authentication first
   const auth = await checkVlAuth();
   if (!auth.authenticated) {
@@ -414,8 +418,8 @@ async function fetchVlLevels(ticker) {
     'MaxDate': today,
     'VCD': '0',
     'RelativeSize': '0',
-    'TradeLevelRank': '5',
-    'TradeLevelCount': '5'
+    'TradeLevelRank': levelCount,
+    'TradeLevelCount': levelCount
   });
 
   try {

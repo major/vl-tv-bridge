@@ -46,7 +46,8 @@ const elements = {
   symbolInput: document.getElementById('symbol-input'),
   priceInput: document.getElementById('price-input'),
   addBtn: document.getElementById('add-btn'),
-  debugToggle: document.getElementById('debug-toggle')
+  debugToggle: document.getElementById('debug-toggle'),
+  levelCountSelect: document.getElementById('level-count-select')
 };
 
 // State
@@ -75,9 +76,10 @@ async function init() {
     checkVlAuth()
   ]);
 
-  // Load debug setting
-  const stored = await browser.storage.local.get('debugMode');
+  // Load settings
+  const stored = await browser.storage.local.get(['debugMode', 'levelCount']);
   elements.debugToggle.checked = stored.debugMode || false;
+  elements.levelCountSelect.value = stored.levelCount ?? 10;
 
   // Set up event listeners
   setupEventListeners();
@@ -487,6 +489,15 @@ async function toggleDebug() {
 }
 
 /**
+ * Handle level count selection change
+ */
+async function handleLevelCountChange() {
+  const levelCount = parseInt(elements.levelCountSelect.value, 10);
+  await browser.storage.local.set({ levelCount });
+  console.log('⚙️ Level count set to:', levelCount);
+}
+
+/**
  * Toggle collapsible sections
  */
 function toggleSection(e) {
@@ -515,6 +526,7 @@ function setupEventListeners() {
   elements.clearCacheBtn.addEventListener('click', clearCache);
   elements.addBtn.addEventListener('click', addManualLevel);
   elements.debugToggle.addEventListener('change', toggleDebug);
+  elements.levelCountSelect.addEventListener('change', handleLevelCountChange);
 
   // Collapsible sections
   document.querySelectorAll('.section-header').forEach(header => {

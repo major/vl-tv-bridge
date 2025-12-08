@@ -312,6 +312,40 @@ header h1 {
   color: #666;
 }
 
+/* Settings dropdown */
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.setting-row label {
+  font-size: 12px;
+  color: #ccc;
+}
+
+.setting-select {
+  padding: 8px 12px;
+  border: 1px solid #333;
+  border-radius: 4px;
+  background: #1a1a2e;
+  color: #eee;
+  font-size: 12px;
+  cursor: pointer;
+  min-width: 100px;
+}
+
+.setting-select:focus {
+  outline: none;
+  border-color: #02A9DE;
+}
+
+.setting-select option {
+  background: #1a1a2e;
+  color: #eee;
+}
+
 /* Footer */
 footer {
   display: flex;

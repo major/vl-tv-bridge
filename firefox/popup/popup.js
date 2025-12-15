@@ -451,7 +451,7 @@ async function drawCachedLevels() {
  */
 async function clearCache() {
   levels = {};
-  await browser.storage.local.set({ tradeLevels: {} });
+  await browser.runtime.sendMessage({ type: 'CLEAR_LEVELS' });
   renderLevels();
   updateButtonStates();
   elements.status.textContent = '🗑️ Cache cleared';

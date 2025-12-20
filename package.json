@@ -1,6 +1,6 @@
 {
   "name": "vl-tv-bridge",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "description": "Draw VolumeLeaders trade levels on TradingView charts",
   "scripts": {
     "build": "web-ext build --source-dir=firefox --artifacts-dir=build --overwrite-dest && npm run rename-artifacts",

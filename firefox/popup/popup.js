@@ -54,7 +54,9 @@ const elements = {
   yearRangeSelect: document.getElementById('year-range-select'),
   clusteringToggle: document.getElementById('clustering-toggle'),
   thresholdSelect: document.getElementById('threshold-select'),
-  thresholdRow: document.getElementById('threshold-row')
+  thresholdRow: document.getElementById('threshold-row'),
+  lineColorInput: document.getElementById('line-color-input'),
+  lineThicknessSelect: document.getElementById('line-thickness-select')
 };
 
 // State
@@ -89,7 +91,8 @@ async function init() {
 
   // Load settings
   const stored = await browser.storage.local.get([
-    'debugMode', 'levelCount', 'tradeCount', 'yearRange', 'clusteringEnabled', 'clusterThreshold'
+    'debugMode', 'levelCount', 'tradeCount', 'yearRange', 'clusteringEnabled', 'clusterThreshold',
+    'lineColor', 'lineThickness'
   ]);
   elements.debugToggle.checked = stored.debugMode || false;
   elements.levelCountSelect.value = stored.levelCount ?? 10;
@@ -97,6 +100,8 @@ async function init() {
   elements.yearRangeSelect.value = stored.yearRange ?? 5;
   elements.clusteringToggle.checked = stored.clusteringEnabled !== false; // Default true
   elements.thresholdSelect.value = stored.clusterThreshold ?? 1.0;
+  elements.lineColorInput.value = stored.lineColor ?? '#02A9DE';
+  elements.lineThicknessSelect.value = stored.lineThickness ?? 2;
   updateThresholdVisibility();
 
   // Set up event listeners
@@ -285,6 +290,11 @@ async function fetchAndDraw() {
   elements.status.textContent = `Fetching levels for ${currentSymbol}...`;
 
   try {
+    // Get line style settings
+    const settings = await browser.storage.local.get(['lineColor', 'lineThickness']);
+    const lineColor = settings.lineColor ?? '#02A9DE';
+    const lineThickness = settings.lineThickness ?? 2;
+
     // Send fetch request with tabId - background script handles drawing
     // This ensures draw happens even if popup closes during fetch
     const response = await browser.runtime.sendMessage({
@@ -292,8 +302,8 @@ async function fetchAndDraw() {
       symbol: currentSymbol,
       tabId: currentTabId,
       drawOptions: {
-        color: '#02A9DE',
-        width: 2,
+        color: lineColor,
+        width: lineThickness,
         style: 0
       }
     });
@@ -414,6 +424,11 @@ async function drawCachedLevels() {
   elements.status.textContent = 'Drawing cached levels...';
 
   try {
+    // Get line style settings
+    const settings = await browser.storage.local.get(['lineColor', 'lineThickness']);
+    const lineColor = settings.lineColor ?? '#02A9DE';
+    const lineThickness = settings.lineThickness ?? 2;
+
     // Filter for current symbol if we have one
     let levelsToDraw = allLevels;
     if (currentSymbol && levels[currentSymbol]) {
@@ -429,8 +444,8 @@ async function drawCachedLevels() {
       type: 'DRAW_LEVELS',
       levels: levelsWithLabels,
       options: {
-        color: '#02A9DE',
-        width: 2,
+        color: lineColor,
+        width: lineThickness,
         style: 0
       }
     });
@@ -585,6 +600,24 @@ async function handleThresholdChange() {
 }
 
 /**
+ * Handle line color change
+ */
+async function handleLineColorChange() {
+  const color = elements.lineColorInput.value;
+  await browser.storage.local.set({ lineColor: color });
+  console.log('⚙️ Line color set to:', color);
+}
+
+/**
+ * Handle line thickness selection change
+ */
+async function handleLineThicknessChange() {
+  const thickness = parseInt(elements.lineThicknessSelect.value, 10);
+  await browser.storage.local.set({ lineThickness: thickness });
+  console.log('⚙️ Line thickness set to:', thickness);
+}
+
+/**
  * Update threshold row visibility based on clustering toggle
  */
 function updateThresholdVisibility() {
@@ -627,6 +660,8 @@ function setupEventListeners() {
   elements.yearRangeSelect.addEventListener('change', handleYearRangeChange);
   elements.clusteringToggle.addEventListener('change', handleClusteringToggle);
   elements.thresholdSelect.addEventListener('change', handleThresholdChange);
+  elements.lineColorInput.addEventListener('change', handleLineColorChange);
+  elements.lineThicknessSelect.addEventListener('change', handleLineThicknessChange);
 
   // Collapsible sections
   document.querySelectorAll('.section-header').forEach(header => {

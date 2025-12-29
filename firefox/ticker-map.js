@@ -32,7 +32,7 @@ const COUNTRY_SUFFIXES = ['.US', '.UK', '.DE', '.FR', '.JP', '.HK', '.AU', '.CA'
 /**
  * Translate TradingView ticker to VolumeLeaders format
  * @param {string} tvTicker - TradingView format ticker (e.g., "BRK.B", "AAPL.US")
- * @returns {string} - VolumeLeaders format ticker (e.g., "BRKB", "AAPL")
+ * @returns {string} - VolumeLeaders format ticker (e.g., "BRK.B", "AAPL")
  */
 function tvToVl(tvTicker) {
   if (!tvTicker) return null;
@@ -49,7 +49,7 @@ function tvToVl(tvTicker) {
     return TV_TO_VL_MAP[ticker];
   }
 
-  // Strip country suffixes (.US, .UK, etc.)
+  // Strip country suffixes (.US, .UK, etc.) but preserve share classes (.A, .B)
   for (const suffix of COUNTRY_SUFFIXES) {
     if (ticker.endsWith(suffix)) {
       ticker = ticker.slice(0, -suffix.length);
@@ -57,13 +57,7 @@ function tvToVl(tvTicker) {
     }
   }
 
-  // Handle share class notation: X.Y -> XY (e.g., BRK.B -> BRKB)
-  // Only applies to single-letter suffixes (share classes)
-  const dotMatch = ticker.match(/^([A-Z]+)\.([A-Z])$/);
-  if (dotMatch) {
-    ticker = dotMatch[1] + dotMatch[2];
-  }
-
+  // VolumeLeaders accepts share class notation as-is (BRK.B stays BRK.B)
   return ticker;
 }
 

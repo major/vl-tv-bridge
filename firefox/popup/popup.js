@@ -102,6 +102,7 @@ async function init() {
   elements.thresholdSelect.value = stored.clusterThreshold ?? 1.0;
   elements.lineColorInput.value = stored.lineColor ?? '#02A9DE';
   elements.lineThicknessSelect.value = stored.lineThickness ?? 2;
+  console.log('🎨 POPUP: Loaded color from storage:', stored.lineColor, '-> input value:', elements.lineColorInput.value);
   updateThresholdVisibility();
 
   // Set up event listeners
@@ -294,6 +295,7 @@ async function fetchAndDraw() {
     const settings = await browser.storage.local.get(['lineColor', 'lineThickness']);
     const lineColor = settings.lineColor ?? '#02A9DE';
     const lineThickness = settings.lineThickness ?? 2;
+    console.log('🎨 POPUP: Drawing with color:', lineColor, 'thickness:', lineThickness);
 
     // Send fetch request with tabId - background script handles drawing
     // This ensures draw happens even if popup closes during fetch
@@ -604,8 +606,11 @@ async function handleThresholdChange() {
  */
 async function handleLineColorChange() {
   const color = elements.lineColorInput.value;
+  console.log('🎨 POPUP: Color picker changed to:', color);
   await browser.storage.local.set({ lineColor: color });
-  console.log('⚙️ Line color set to:', color);
+  // Verify it was saved
+  const saved = await browser.storage.local.get('lineColor');
+  console.log('🎨 POPUP: Verified saved color:', saved.lineColor);
 }
 
 /**

@@ -157,6 +157,7 @@
     const { price, label, options = {} } = data;
 
     // Default styling - VL cyan theme
+    // Only pass TradingView-compatible properties (no spread to avoid extra props)
     const overrides = {
       linecolor: options.linecolor || '#02A9DE',
       linewidth: options.linewidth || 2,
@@ -166,9 +167,10 @@
       fontsize: options.fontsize || 12,
       bold: options.bold !== false,
       horzLabelsAlign: options.horzLabelsAlign || 'right',
-      vertLabelsAlign: options.vertLabelsAlign || 'middle',
-      ...options
+      vertLabelsAlign: options.vertLabelsAlign || 'middle'
     };
+
+    console.log('🎨 INJECTED: Line overrides:', JSON.stringify(overrides));
 
     const shapeConfig = {
       shape: 'horizontal_line',
@@ -226,6 +228,7 @@
     const { highPrice, lowPrice, midPrice, label, options = {} } = data;
 
     // Use thick line at midpoint to represent the zone
+    // Only pass TradingView-compatible properties (no spread to avoid extra props)
     const overrides = {
       linecolor: options.linecolor || '#02A9DE',
       linewidth: options.linewidth || 4, // Thick line for zones (vs 2 for single levels)
@@ -235,9 +238,10 @@
       fontsize: options.fontsize || 12,
       bold: options.bold !== false,
       horzLabelsAlign: options.horzLabelsAlign || 'right',
-      vertLabelsAlign: options.vertLabelsAlign || 'middle',
-      ...options
+      vertLabelsAlign: options.vertLabelsAlign || 'middle'
     };
+
+    console.log('🎨 INJECTED: Zone overrides:', JSON.stringify(overrides));
 
     const shapeConfig = {
       shape: 'horizontal_line',

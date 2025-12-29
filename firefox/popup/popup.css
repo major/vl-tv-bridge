@@ -365,6 +365,22 @@ header h1 {
   color: #eee;
 }
 
+.setting-text {
+  padding: 8px 12px;
+  border: 1px solid #333;
+  border-radius: 4px;
+  background: #1a1a2e;
+  color: #eee;
+  font-family: monospace;
+  width: 80px;
+  text-transform: uppercase;
+}
+
+.setting-text:focus {
+  outline: none;
+  border-color: #02A9DE;
+}
+
 /* Footer */
 footer {
   display: flex;

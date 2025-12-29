@@ -102,7 +102,6 @@ async function init() {
   elements.thresholdSelect.value = stored.clusterThreshold ?? 1.0;
   elements.lineColorInput.value = stored.lineColor ?? '#02A9DE';
   elements.lineThicknessSelect.value = stored.lineThickness ?? 2;
-  console.log('🎨 POPUP: Loaded color from storage:', stored.lineColor, '-> input value:', elements.lineColorInput.value);
   updateThresholdVisibility();
 
   // Set up event listeners
@@ -291,11 +290,12 @@ async function fetchAndDraw() {
   elements.status.textContent = `Fetching levels for ${currentSymbol}...`;
 
   try {
-    // Get line style settings
-    const settings = await browser.storage.local.get(['lineColor', 'lineThickness']);
-    const lineColor = settings.lineColor ?? '#02A9DE';
-    const lineThickness = settings.lineThickness ?? 2;
-    console.log('🎨 POPUP: Drawing with color:', lineColor, 'thickness:', lineThickness);
+    // Get line style settings directly from inputs (default to cyan if invalid)
+    let lineColor = elements.lineColorInput?.value?.trim().toUpperCase() || '#02A9DE';
+    if (!/^#[0-9A-F]{6}$/.test(lineColor)) {
+      lineColor = '#02A9DE';
+    }
+    const lineThickness = parseInt(elements.lineThicknessSelect?.value, 10) || 2;
 
     // Send fetch request with tabId - background script handles drawing
     // This ensures draw happens even if popup closes during fetch
@@ -426,10 +426,12 @@ async function drawCachedLevels() {
   elements.status.textContent = 'Drawing cached levels...';
 
   try {
-    // Get line style settings
-    const settings = await browser.storage.local.get(['lineColor', 'lineThickness']);
-    const lineColor = settings.lineColor ?? '#02A9DE';
-    const lineThickness = settings.lineThickness ?? 2;
+    // Get line style settings directly from inputs (default to cyan if invalid)
+    let lineColor = elements.lineColorInput?.value?.trim().toUpperCase() || '#02A9DE';
+    if (!/^#[0-9A-F]{6}$/.test(lineColor)) {
+      lineColor = '#02A9DE';
+    }
+    const lineThickness = parseInt(elements.lineThicknessSelect?.value, 10) || 2;
 
     // Filter for current symbol if we have one
     let levelsToDraw = allLevels;
@@ -605,12 +607,21 @@ async function handleThresholdChange() {
  * Handle line color change
  */
 async function handleLineColorChange() {
-  const color = elements.lineColorInput.value;
-  console.log('🎨 POPUP: Color picker changed to:', color);
+  let color = elements.lineColorInput.value.trim().toUpperCase();
+
+  // Add # if missing
+  if (color && !color.startsWith('#')) {
+    color = '#' + color;
+    elements.lineColorInput.value = color;
+  }
+
+  // Validate hex color format
+  if (!/^#[0-9A-F]{6}$/.test(color)) {
+    return; // Invalid, don't save
+  }
+
   await browser.storage.local.set({ lineColor: color });
-  // Verify it was saved
-  const saved = await browser.storage.local.get('lineColor');
-  console.log('🎨 POPUP: Verified saved color:', saved.lineColor);
+  console.log('🎨 Line color set to:', color);
 }
 
 /**
@@ -665,7 +676,7 @@ function setupEventListeners() {
   elements.yearRangeSelect.addEventListener('change', handleYearRangeChange);
   elements.clusteringToggle.addEventListener('change', handleClusteringToggle);
   elements.thresholdSelect.addEventListener('change', handleThresholdChange);
-  elements.lineColorInput.addEventListener('change', handleLineColorChange);
+  elements.lineColorInput.addEventListener('input', handleLineColorChange);
   elements.lineThicknessSelect.addEventListener('change', handleLineThicknessChange);
 
   // Collapsible sections

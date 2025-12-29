@@ -118,17 +118,25 @@
   }
 
   /**
-   * Clean symbol string (remove exchange prefix, etc.)
+   * Clean symbol string (remove exchange prefix and country suffixes, preserve share classes)
    */
   function cleanSymbol(sym) {
     if (!sym) return null;
 
     // Remove exchange prefix (e.g., "NASDAQ:AAPL" -> "AAPL")
     const parts = sym.split(':');
-    const ticker = parts[parts.length - 1];
+    let ticker = parts[parts.length - 1].toUpperCase();
 
-    // Remove any suffix (e.g., "AAPL.US" -> "AAPL")
-    return ticker.split('.')[0].toUpperCase();
+    // Strip country suffixes (.US, .UK, etc.) but preserve share class suffixes (.A, .B)
+    const countrySuffixes = ['.US', '.UK', '.DE', '.FR', '.JP', '.HK', '.AU', '.CA'];
+    for (const suffix of countrySuffixes) {
+      if (ticker.endsWith(suffix)) {
+        ticker = ticker.slice(0, -suffix.length);
+        break;
+      }
+    }
+
+    return ticker;
   }
 
   /**

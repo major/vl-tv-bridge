@@ -18,6 +18,7 @@
   ],
   "background": {
     "scripts": [
+      "ticker-map.js",
       "background.js"
     ],
     "persistent": true

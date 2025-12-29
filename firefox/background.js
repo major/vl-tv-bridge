@@ -347,7 +347,12 @@ async function fetchVlLevels(ticker) {
     throw new Error('No ticker symbol provided');
   }
 
-  ticker = ticker.toUpperCase();
+  // Translate TV ticker format to VL format (e.g., BRK.B -> BRKB)
+  const originalTicker = ticker;
+  ticker = tickerMap.tvToVl(ticker);
+  if (ticker !== originalTicker.toUpperCase()) {
+    console.log(`🔄 Translated ticker: ${originalTicker} -> ${ticker}`);
+  }
   console.log(`🔍 Fetching VL levels for ${ticker}...`);
 
   // Get user's settings
@@ -567,7 +572,12 @@ async function fetchVlTrades(ticker, tradeCount = 10) {
     throw new Error('No ticker symbol provided');
   }
 
-  ticker = ticker.toUpperCase();
+  // Translate TV ticker format to VL format (e.g., BRK.B -> BRKB)
+  const originalTicker = ticker;
+  ticker = tickerMap.tvToVl(ticker);
+  if (ticker !== originalTicker.toUpperCase()) {
+    console.log(`🔄 Translated ticker: ${originalTicker} -> ${ticker}`);
+  }
   console.log(`🔍 Fetching VL trades for ${ticker}...`);
 
   // Get user's settings for date range (same setting as trade levels)

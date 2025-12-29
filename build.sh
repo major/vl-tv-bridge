@@ -37,6 +37,7 @@ build_firefox() {
 
     # Copy extension files
     cp "$FIREFOX_SRC/manifest.json" "$out_dir/"
+    cp "$FIREFOX_SRC/ticker-map.js" "$out_dir/"
     cp "$FIREFOX_SRC/background.js" "$out_dir/"
     cp "$FIREFOX_SRC/content-script.js" "$out_dir/"
     cp "$FIREFOX_SRC/injected.js" "$out_dir/"

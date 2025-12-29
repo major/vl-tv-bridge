@@ -99,11 +99,6 @@ function isShareClass(ticker) {
   return /^[A-Z]+\.[A-Z]$/.test(upper) || VL_TO_TV_MAP[upper] !== undefined;
 }
 
-// Export for use in other scripts
-// In browser extension context, these will be available globally
-if (typeof window !== 'undefined') {
-  window.tickerMap = { tvToVl, vlToTv, isShareClass };
-}
-if (typeof globalThis !== 'undefined') {
-  globalThis.tickerMap = { tvToVl, vlToTv, isShareClass };
-}
+// Export as global object for use in background.js
+// (Firefox MV2 background scripts share global scope when loaded via manifest)
+var tickerMap = { tvToVl, vlToTv, isShareClass };

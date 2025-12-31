@@ -166,8 +166,8 @@
       textcolor: options.textcolor || options.linecolor || '#02A9DE',
       fontsize: options.fontsize || 12,
       bold: options.bold !== false,
-      horzLabelsAlign: options.horzLabelsAlign || 'right',
-      vertLabelsAlign: options.vertLabelsAlign || 'middle'
+      horzLabelsAlign: 'right',
+      vertLabelsAlign: 'top'
     };
 
     console.log('🎨 INJECTED: Line overrides:', JSON.stringify(overrides));
@@ -237,8 +237,8 @@
       textcolor: options.textcolor || options.linecolor || '#02A9DE',
       fontsize: options.fontsize || 12,
       bold: options.bold !== false,
-      horzLabelsAlign: options.horzLabelsAlign || 'right',
-      vertLabelsAlign: options.vertLabelsAlign || 'middle'
+      horzLabelsAlign: 'right',
+      vertLabelsAlign: 'top'
     };
 
     console.log('🎨 INJECTED: Zone overrides:', JSON.stringify(overrides));

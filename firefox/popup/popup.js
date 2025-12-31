@@ -15,8 +15,9 @@ function formatDollars(amount) {
 
 /**
  * Format level label for TradingView line (e.g., "VL #1 $1.6B")
+ * When showDates is true, includes date range (e.g., "VL #1 $1.6B\n2025-09-24 - 2025-11-25")
  */
-function formatLevelLabel(level) {
+function formatLevelLabel(level, showDates = false) {
   const parts = ['VL'];
 
   if (level.rank) {
@@ -27,7 +28,16 @@ function formatLevelLabel(level) {
     parts.push(formatDollars(level.dollars));
   }
 
-  return parts.join(' ');
+  let label = parts.join(' ');
+
+  // Add start date if enabled and available
+  if (showDates && level.dates) {
+    // Extract just the start date from "YYYY-MM-DD - YYYY-MM-DD"
+    const startDate = level.dates.split(' - ')[0];
+    label += `\n${startDate}`;
+  }
+
+  return label;
 }
 
 // DOM elements
@@ -56,7 +66,8 @@ const elements = {
   thresholdSelect: document.getElementById('threshold-select'),
   thresholdRow: document.getElementById('threshold-row'),
   lineColorInput: document.getElementById('line-color-input'),
-  lineThicknessSelect: document.getElementById('line-thickness-select')
+  lineThicknessSelect: document.getElementById('line-thickness-select'),
+  showDatesToggle: document.getElementById('show-dates-toggle')
 };
 
 // State
@@ -92,7 +103,7 @@ async function init() {
   // Load settings
   const stored = await browser.storage.local.get([
     'debugMode', 'levelCount', 'tradeCount', 'yearRange', 'clusteringEnabled', 'clusterThreshold',
-    'lineColor', 'lineThickness'
+    'lineColor', 'lineThickness', 'showDates'
   ]);
   elements.debugToggle.checked = stored.debugMode || false;
   elements.levelCountSelect.value = stored.levelCount ?? 10;
@@ -102,6 +113,7 @@ async function init() {
   elements.thresholdSelect.value = stored.clusterThreshold ?? 1.0;
   elements.lineColorInput.value = stored.lineColor ?? '#02A9DE';
   elements.lineThicknessSelect.value = stored.lineThickness ?? 2;
+  elements.showDatesToggle.checked = stored.showDates || false; // Default false
   updateThresholdVisibility();
 
   // Set up event listeners
@@ -432,6 +444,7 @@ async function drawCachedLevels() {
       lineColor = '#02A9DE';
     }
     const lineThickness = parseInt(elements.lineThicknessSelect?.value, 10) || 2;
+    const showDates = elements.showDatesToggle?.checked || false;
 
     // Filter for current symbol if we have one
     let levelsToDraw = allLevels;
@@ -441,7 +454,7 @@ async function drawCachedLevels() {
 
     const levelsWithLabels = levelsToDraw.map(level => ({
       ...level,
-      label: formatLevelLabel(level)
+      label: formatLevelLabel(level, showDates)
     }));
 
     const response = await browser.tabs.sendMessage(currentTabId, {
@@ -634,6 +647,15 @@ async function handleLineThicknessChange() {
 }
 
 /**
+ * Handle show dates toggle change
+ */
+async function handleShowDatesToggle() {
+  const enabled = elements.showDatesToggle.checked;
+  await browser.storage.local.set({ showDates: enabled });
+  console.log('⚙️ Show dates enabled:', enabled);
+}
+
+/**
  * Update threshold row visibility based on clustering toggle
  */
 function updateThresholdVisibility() {
@@ -678,6 +700,7 @@ function setupEventListeners() {
   elements.thresholdSelect.addEventListener('change', handleThresholdChange);
   elements.lineColorInput.addEventListener('input', handleLineColorChange);
   elements.lineThicknessSelect.addEventListener('change', handleLineThicknessChange);
+  elements.showDatesToggle.addEventListener('change', handleShowDatesToggle);
 
   // Collapsible sections
   document.querySelectorAll('.section-header').forEach(header => {

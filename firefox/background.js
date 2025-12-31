@@ -511,10 +511,11 @@ async function fetchAndDraw(symbol, tabId = null, drawOptions = {}) {
   // Step 2: If tabId provided, draw the levels
   if (tabId) {
     try {
-      // Get clustering settings
-      const settings = await browser.storage.local.get(['clusteringEnabled', 'clusterThreshold']);
+      // Get clustering and display settings
+      const settings = await browser.storage.local.get(['clusteringEnabled', 'clusterThreshold', 'showDates']);
       const clusteringEnabled = settings.clusteringEnabled !== false; // Default true
       const threshold = settings.clusterThreshold ?? 1.0;
+      const showDates = settings.showDates || false; // Default false
 
       // Apply clustering if enabled
       let drawables;
@@ -528,7 +529,7 @@ async function fetchAndDraw(symbol, tabId = null, drawOptions = {}) {
       // Add appropriate labels to each item
       const drawablesWithLabels = drawables.map(item => ({
         ...item,
-        label: item.type === 'zone' ? formatZoneLabel(item) : formatLevelLabel(item)
+        label: item.type === 'zone' ? formatZoneLabel(item, showDates) : formatLevelLabel(item, showDates)
       }));
 
       console.log(`🎨 BACKGROUND: Drawing ${drawablesWithLabels.length} items on tab ${tabId}`);
@@ -783,8 +784,9 @@ async function fetchAndDrawTrades(symbol, tabId = null, tradeCount = 5) {
 
 /**
  * Format level label for TradingView line (e.g., "VL #1 $1.6B")
+ * When showDates is true, includes date range (e.g., "VL #1 $1.6B\n2025-09-24 - 2025-11-25")
  */
-function formatLevelLabel(level) {
+function formatLevelLabel(level, showDates = false) {
   const parts = ['VL'];
 
   if (level.rank) {
@@ -795,7 +797,16 @@ function formatLevelLabel(level) {
     parts.push(formatDollars(level.dollars));
   }
 
-  return parts.join(' ');
+  let label = parts.join(' ');
+
+  // Add start date if enabled and available
+  if (showDates && level.dates) {
+    // Extract just the start date from "YYYY-MM-DD - YYYY-MM-DD"
+    const startDate = level.dates.split(' - ')[0];
+    label += `\n${startDate}`;
+  }
+
+  return label;
 }
 
 /**
@@ -882,18 +893,18 @@ function finalizeCluster(levels) {
 
 /**
  * Format zone label for TradingView line
- * e.g., "VL #1-3 $2.9B"
+ * e.g., "VL #7, 9, 10 $2.9B"
+ * When showDates is true, includes aggregated date range from all levels
  */
-function formatZoneLabel(zone) {
-  const { aggregated } = zone;
+function formatZoneLabel(zone, showDates = false) {
+  const { aggregated, levels } = zone;
   const parts = ['VL'];
 
-  // Rank range
-  if (aggregated.rankRange[0] !== null) {
-    if (aggregated.rankRange[0] === aggregated.rankRange[1]) {
-      parts.push(`#${aggregated.rankRange[0]}`);
-    } else {
-      parts.push(`#${aggregated.rankRange[0]}-${aggregated.rankRange[1]}`);
+  // List actual ranks from levels (comma-delimited)
+  if (levels && levels.length > 0) {
+    const ranks = levels.map(l => l.rank).filter(Boolean).sort((a, b) => a - b);
+    if (ranks.length > 0) {
+      parts.push(`#${ranks.join(',')}`);
     }
   }
 
@@ -902,7 +913,27 @@ function formatZoneLabel(zone) {
     parts.push(formatDollars(aggregated.totalDollars));
   }
 
-  return parts.join(' ');
+  let label = parts.join(' ');
+
+  // Add earliest start date if enabled
+  if (showDates && levels && levels.length > 0) {
+    // Find the earliest start date across all levels in the zone
+    const startDates = [];
+    for (const level of levels) {
+      if (level.dates) {
+        const startDate = level.dates.split(' - ')[0];
+        if (startDate) {
+          startDates.push(startDate);
+        }
+      }
+    }
+    if (startDates.length > 0) {
+      startDates.sort();
+      label += `\n${startDates[0]}`;
+    }
+  }
+
+  return label;
 }
 
 /**

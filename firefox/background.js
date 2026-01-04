@@ -784,7 +784,7 @@ async function fetchAndDrawTrades(symbol, tabId = null, tradeCount = 5) {
 
 /**
  * Format level label for TradingView line (e.g., "VL #1 $1.6B")
- * When showDates is true, includes date range (e.g., "VL #1 $1.6B\n2025-09-24 - 2025-11-25")
+ * When showDates is true, includes start date (e.g., "VL #1 $1.6B 2025-09-24")
  */
 function formatLevelLabel(level, showDates = false) {
   const parts = ['VL'];
@@ -803,7 +803,7 @@ function formatLevelLabel(level, showDates = false) {
   if (showDates && level.dates) {
     // Extract just the start date from "YYYY-MM-DD - YYYY-MM-DD"
     const startDate = level.dates.split(' - ')[0];
-    label += `\n${startDate}`;
+    label += ` ${startDate}`;
   }
 
   return label;
@@ -929,7 +929,7 @@ function formatZoneLabel(zone, showDates = false) {
     }
     if (startDates.length > 0) {
       startDates.sort();
-      label += `\n${startDates[0]}`;
+      label += ` ${startDates[0]}`;
     }
   }
 

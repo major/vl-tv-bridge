@@ -50,14 +50,9 @@ const elements = {
   fetchDrawBtn: document.getElementById('fetch-draw-btn'),
   fetchTradesBtn: document.getElementById('fetch-trades-btn'),
   clearChartBtn: document.getElementById('clear-chart-btn'),
-  refreshBtn: document.getElementById('refresh-btn'),
-  levelCount: document.getElementById('level-count'),
-  levelsList: document.getElementById('levels-list'),
-  drawCachedBtn: document.getElementById('draw-cached-btn'),
-  clearCacheBtn: document.getElementById('clear-cache-btn'),
-  symbolInput: document.getElementById('symbol-input'),
-  priceInput: document.getElementById('price-input'),
-  addBtn: document.getElementById('add-btn'),
+
+
+
   debugToggle: document.getElementById('debug-toggle'),
   levelCountSelect: document.getElementById('level-count-select'),
   tradeCountSelect: document.getElementById('trade-count-select'),
@@ -71,7 +66,7 @@ const elements = {
 };
 
 // State
-let levels = {};
+
 let tvReady = false;
 let vlReady = false;
 let currentSymbol = null;
@@ -91,9 +86,6 @@ async function init() {
   const tabs = await browser.tabs.query({ active: true, currentWindow: true });
   currentTabId = tabs[0]?.id;
 
-  // Load cached levels
-  await loadLevels();
-
   // Check statuses in parallel
   await Promise.all([
     checkTradingView(tabs[0]),
@@ -111,7 +103,7 @@ async function init() {
   elements.yearRangeSelect.value = stored.yearRange ?? 5;
   elements.clusteringToggle.checked = stored.clusteringEnabled !== false; // Default true
   elements.thresholdSelect.value = stored.clusterThreshold ?? 1.0;
-  elements.lineColorInput.value = stored.lineColor ?? '#02A9DE';
+  elements.lineColorInput.value = stored.lineColor ?? '#2962FF';
   elements.lineThicknessSelect.value = stored.lineThickness ?? 2;
   elements.showDatesToggle.checked = stored.showDates || false; // Default false
   updateThresholdVisibility();
@@ -223,70 +215,9 @@ function updateButtonStates() {
 
   elements.clearChartBtn.disabled = !tvReady;
 
-  const hasCachedLevels = Object.values(levels).flat().length > 0;
-  elements.drawCachedBtn.disabled = !tvReady || !hasCachedLevels;
 }
 
-/**
- * Load cached levels from storage
- */
-async function loadLevels() {
-  const stored = await browser.storage.local.get('tradeLevels');
-  levels = stored.tradeLevels || {};
-  renderLevels();
-}
 
-/**
- * Render cached levels list
- */
-function renderLevels() {
-  const symbols = Object.keys(levels);
-  const totalCount = Object.values(levels).flat().length;
-
-  elements.levelCount.textContent = totalCount;
-
-  if (totalCount === 0) {
-    elements.levelsList.innerHTML = `<div class="empty">No levels cached yet.</div>`;
-    return;
-  }
-
-  let html = '';
-
-  for (const symbol of symbols.sort()) {
-    const symbolLevels = levels[symbol] || [];
-    if (symbolLevels.length === 0) continue;
-
-    html += `<div class="symbol-group">
-      <div class="symbol-header">${symbol} (${symbolLevels.length})</div>`;
-
-    const sorted = symbolLevels.sort((a, b) => {
-      if (a.rank && b.rank) return a.rank - b.rank;
-      return b.price - a.price;
-    });
-
-    for (const level of sorted) {
-      const rankBadge = level.rank ? `<span class="rank">#${level.rank}</span>` : '';
-      const dollarInfo = level.dollars ? formatDollars(level.dollars) : '';
-
-      html += `
-        <div class="level-item" data-symbol="${symbol}" data-price="${level.price}">
-          ${rankBadge}
-          <span class="price">$${level.price.toFixed(2)}</span>
-          <span class="dollars">${dollarInfo}</span>
-          <button class="remove" title="Remove">×</button>
-        </div>`;
-    }
-
-    html += '</div>';
-  }
-
-  elements.levelsList.innerHTML = html;
-
-  // Add remove handlers
-  elements.levelsList.querySelectorAll('.remove').forEach(btn => {
-    btn.addEventListener('click', handleRemoveLevel);
-  });
-}
 
 /**
  * Main action: Fetch VL levels and draw on chart
@@ -298,19 +229,16 @@ async function fetchAndDraw() {
   }
 
   elements.fetchDrawBtn.disabled = true;
-  elements.fetchDrawBtn.textContent = '⏳ Fetching...';
+  elements.fetchDrawBtn.disabled = true;
   elements.status.textContent = `Fetching levels for ${currentSymbol}...`;
 
   try {
-    // Get line style settings directly from inputs (default to cyan if invalid)
-    let lineColor = elements.lineColorInput?.value?.trim().toUpperCase() || '#02A9DE';
+    let lineColor = elements.lineColorInput?.value?.trim().toUpperCase() || '#2962FF';
     if (!/^#[0-9A-F]{6}$/.test(lineColor)) {
-      lineColor = '#02A9DE';
+      lineColor = '#2962FF';
     }
     const lineThickness = parseInt(elements.lineThicknessSelect?.value, 10) || 2;
 
-    // Send fetch request with tabId - background script handles drawing
-    // This ensures draw happens even if popup closes during fetch
     const response = await browser.runtime.sendMessage({
       type: 'FETCH_VL_LEVELS',
       symbol: currentSymbol,
@@ -334,15 +262,12 @@ async function fetchAndDraw() {
       elements.status.textContent = `⚠️ Fetched ${response.count} levels but draw failed`;
     }
 
-    // Reload cached levels
-    await loadLevels();
-
   } catch (err) {
     console.error('Fetch & Draw error:', err);
     elements.status.textContent = `❌ ${err.message}`;
   }
 
-  elements.fetchDrawBtn.textContent = '🚀 Fetch & Draw VL Levels';
+  
   elements.fetchDrawBtn.disabled = false;
   updateButtonStates();
 }
@@ -357,7 +282,7 @@ async function fetchAndDrawTrades() {
   }
 
   elements.fetchTradesBtn.disabled = true;
-  elements.fetchTradesBtn.textContent = '⏳ Fetching trades...';
+  elements.fetchTradesBtn.disabled = true;
   elements.status.textContent = `Fetching large trades for ${currentSymbol}...`;
 
   try {
@@ -382,10 +307,10 @@ async function fetchAndDrawTrades() {
     } else if (response.drawResult?.success) {
       const dpCount = response.drawResult.darkPoolCount || 0;
       const litCount = response.drawResult.litCount || 0;
-      const offChartCount = response.drawResult.offChartCount || 0;
+      const skippedCount = response.drawResult.skipped || 0;
       let statusText = `✅ Drew ${response.drawResult.drawn} trades (🔵 ${litCount} lit, 🟠 ${dpCount} dark pool)`;
-      if (offChartCount > 0) {
-        statusText += ` · ← ${offChartCount} historical`;
+      if (skippedCount > 0) {
+        statusText += ` · ${skippedCount} outside range`;
       }
       elements.status.textContent = statusText;
     } else {
@@ -397,7 +322,7 @@ async function fetchAndDrawTrades() {
     elements.status.textContent = `❌ ${err.message}`;
   }
 
-  elements.fetchTradesBtn.textContent = '⭕ Fetch & Draw Large Trades';
+  
   elements.fetchTradesBtn.disabled = false;
   updateButtonStates();
 }
@@ -422,144 +347,7 @@ async function clearChart() {
   }
 }
 
-/**
- * Draw cached levels on chart
- */
-async function drawCachedLevels() {
-  if (!tvReady) return;
 
-  const allLevels = Object.values(levels).flat();
-  if (allLevels.length === 0) {
-    elements.status.textContent = 'No cached levels to draw';
-    return;
-  }
-
-  elements.drawCachedBtn.disabled = true;
-  elements.status.textContent = 'Drawing cached levels...';
-
-  try {
-    // Get line style settings directly from inputs (default to cyan if invalid)
-    let lineColor = elements.lineColorInput?.value?.trim().toUpperCase() || '#02A9DE';
-    if (!/^#[0-9A-F]{6}$/.test(lineColor)) {
-      lineColor = '#02A9DE';
-    }
-    const lineThickness = parseInt(elements.lineThicknessSelect?.value, 10) || 2;
-    const showDates = elements.showDatesToggle?.checked || false;
-
-    // Filter for current symbol if we have one
-    let levelsToDraw = allLevels;
-    if (currentSymbol && levels[currentSymbol]) {
-      levelsToDraw = levels[currentSymbol];
-    }
-
-    const levelsWithLabels = levelsToDraw.map(level => ({
-      ...level,
-      label: formatLevelLabel(level, showDates)
-    }));
-
-    const response = await browser.tabs.sendMessage(currentTabId, {
-      type: 'DRAW_LEVELS',
-      levels: levelsWithLabels,
-      options: {
-        color: lineColor,
-        width: lineThickness,
-        style: 0
-      }
-    });
-
-    if (response?.success) {
-      elements.status.textContent = `✅ Drew ${response.drawn} cached levels`;
-    }
-  } catch (err) {
-    console.error('Draw cached error:', err);
-    elements.status.textContent = `❌ ${err.message}`;
-  }
-
-  elements.drawCachedBtn.disabled = false;
-}
-
-/**
- * Clear cached levels
- */
-async function clearCache() {
-  levels = {};
-  await browser.runtime.sendMessage({ type: 'CLEAR_LEVELS' });
-  renderLevels();
-  updateButtonStates();
-  elements.status.textContent = '🗑️ Cache cleared';
-}
-
-/**
- * Remove a single cached level
- */
-async function handleRemoveLevel(e) {
-  const item = e.target.closest('.level-item');
-  const symbol = item.dataset.symbol;
-  const price = parseFloat(item.dataset.price);
-
-  if (levels[symbol]) {
-    levels[symbol] = levels[symbol].filter(l => l.price !== price);
-    if (levels[symbol].length === 0) {
-      delete levels[symbol];
-    }
-  }
-
-  await browser.storage.local.set({ tradeLevels: levels });
-  renderLevels();
-  updateButtonStates();
-}
-
-/**
- * Add a manual level
- */
-async function addManualLevel() {
-  const symbol = elements.symbolInput.value.trim().toUpperCase() || currentSymbol;
-  const price = parseFloat(elements.priceInput.value);
-
-  if (!symbol || isNaN(price)) {
-    elements.status.textContent = '❌ Enter symbol and price';
-    return;
-  }
-
-  if (!levels[symbol]) {
-    levels[symbol] = [];
-  }
-
-  if (!levels[symbol].find(l => l.price === price)) {
-    levels[symbol].push({
-      price,
-      symbol,
-      timestamp: Date.now(),
-      source: 'manual'
-    });
-  }
-
-  await browser.storage.local.set({ tradeLevels: levels });
-  renderLevels();
-  updateButtonStates();
-
-  elements.symbolInput.value = '';
-  elements.priceInput.value = '';
-  elements.status.textContent = `✅ Added ${symbol} @ $${price.toFixed(2)}`;
-}
-
-/**
- * Refresh status checks
- */
-async function refresh() {
-  const tabs = await browser.tabs.query({ active: true, currentWindow: true });
-  currentTabId = tabs[0]?.id;
-  tvReady = false;
-  vlReady = false;
-  currentSymbol = null;
-
-  await Promise.all([
-    checkTradingView(tabs[0]),
-    checkVlAuth()
-  ]);
-
-  updateButtonStates();
-}
 
 /**
  * Toggle debug mode
@@ -663,23 +451,7 @@ function updateThresholdVisibility() {
     elements.clusteringToggle.checked ? 'flex' : 'none';
 }
 
-/**
- * Toggle collapsible sections
- */
-function toggleSection(e) {
-  const header = e.target.closest('.section-header');
-  if (!header) return;
 
-  const targetId = header.dataset.toggle;
-  const content = document.getElementById(targetId);
-  if (content) {
-    content.classList.toggle('collapsed');
-    const chevron = header.querySelector('.chevron');
-    if (chevron) {
-      chevron.style.transform = content.classList.contains('collapsed') ? 'rotate(-90deg)' : '';
-    }
-  }
-}
 
 /**
  * Set up event listeners
@@ -688,10 +460,9 @@ function setupEventListeners() {
   elements.fetchDrawBtn.addEventListener('click', fetchAndDraw);
   elements.fetchTradesBtn.addEventListener('click', fetchAndDrawTrades);
   elements.clearChartBtn.addEventListener('click', clearChart);
-  elements.refreshBtn.addEventListener('click', refresh);
-  elements.drawCachedBtn.addEventListener('click', drawCachedLevels);
-  elements.clearCacheBtn.addEventListener('click', clearCache);
-  elements.addBtn.addEventListener('click', addManualLevel);
+
+
+
   elements.debugToggle.addEventListener('change', toggleDebug);
   elements.levelCountSelect.addEventListener('change', handleLevelCountChange);
   elements.tradeCountSelect.addEventListener('change', handleTradeCountChange);
@@ -702,15 +473,19 @@ function setupEventListeners() {
   elements.lineThicknessSelect.addEventListener('change', handleLineThicknessChange);
   elements.showDatesToggle.addEventListener('change', handleShowDatesToggle);
 
-  // Collapsible sections
-  document.querySelectorAll('.section-header').forEach(header => {
-    header.addEventListener('click', toggleSection);
+  // Tab switching
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById(`${tab.dataset.tab}-tab`).classList.add('active');
+    });
   });
 
-  // Enter key on price input
-  elements.priceInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') addManualLevel();
-  });
+
+
+
 }
 
 // 🚀 Start

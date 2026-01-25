@@ -13,30 +13,16 @@ const VL_API_PATTERNS = [
   '*://volumeleaders.com/api/*'
 ];
 
-// 📦 State
-let tradeLevels = new Map(); // symbol -> levels[]
-let largeTrades = new Map(); // symbol -> trades[] (for circles)
-let debugMode = true; // Log all intercepted requests initially
-let xsrfToken = null; // Cached XSRF token for API requests
-let xsrfTokenExpiry = 0; // Token expiry timestamp (refresh every 30 min)
+let debugMode = true;
+let xsrfToken = null;
+let xsrfTokenExpiry = 0;
 
 /**
  * Initialize extension
  */
 async function init() {
   console.log('🚀 VL-TV Bridge: Background script loaded');
-
-  // Load saved levels from storage
-  const stored = await browser.storage.local.get('tradeLevels');
-  if (stored.tradeLevels) {
-    tradeLevels = new Map(Object.entries(stored.tradeLevels));
-    console.log('📂 Loaded saved levels:', tradeLevels);
-  }
-
-  // Set up API interception
   setupInterception();
-
-  // Listen for messages from content scripts
   browser.runtime.onMessage.addListener(handleMessage);
 }
 
@@ -173,49 +159,22 @@ function findPriceLevels(obj, url, path = '') {
  * }
  */
 function extractLevels(url, items) {
-  // Try to determine symbol from URL or item data
   const urlSymbol = extractSymbolFromUrl(url);
+  let count = 0;
 
   for (const item of items) {
-    // VL uses "Ticker" (capitalized), fallback to other common names
     const symbol = (item.Ticker || item.ticker || item.symbol || urlSymbol || 'UNKNOWN').toUpperCase();
-
-    // VL uses "Price" (capitalized)
     const price = item.Price || item.price || item.level || item.tradeLevel;
 
     if (price && typeof price === 'number') {
-      if (!tradeLevels.has(symbol)) {
-        tradeLevels.set(symbol, []);
-      }
-
-      const level = {
-        price,
-        symbol,
-        // VL-specific enrichment
-        rank: item.TradeLevelRank || item.rank,
-        dollars: item.Dollars || item.dollars,
-        volume: item.Volume || item.volume,
-        trades: item.Trades || item.trades,
-        dates: item.Dates || item.dates,
-        // General
-        timestamp: Date.now(),
-        source: url
-      };
-
-      // Avoid duplicates (same symbol + price)
-      const existing = tradeLevels.get(symbol);
-      if (!existing.find(l => l.price === price)) {
-        existing.push(level);
-        console.log(`✅ Added level: ${symbol} @ $${price.toFixed(2)} (rank #${level.rank || '?'})`);
+      count++;
+      if (debugMode) {
+        console.log(`📊 Level: ${symbol} @ $${price.toFixed(2)} (rank #${item.TradeLevelRank || '?'})`);
       }
     }
   }
 
-  const totalLevels = Array.from(tradeLevels.values()).flat().length;
-  console.log(`📊 Total levels captured: ${totalLevels}`);
-
-  // Persist to storage
-  saveLevels();
+  console.log(`📊 Intercepted ${count} levels from VL API`);
 }
 
 /**
@@ -242,30 +201,12 @@ function extractSymbolFromUrl(url) {
 }
 
 /**
- * Save levels to storage
- */
-async function saveLevels() {
-  const obj = Object.fromEntries(tradeLevels);
-  await browser.storage.local.set({ tradeLevels: obj });
-}
-
-/**
  * Handle messages from content scripts and popup
  */
 function handleMessage(message, sender, sendResponse) {
   console.log('📨 Message received:', message);
 
   switch (message.type) {
-    case 'GET_LEVELS':
-      // Return levels for a specific symbol or all
-      const symbol = message.symbol?.toUpperCase();
-      if (symbol) {
-        sendResponse({ levels: tradeLevels.get(symbol) || [] });
-      } else {
-        sendResponse({ levels: Object.fromEntries(tradeLevels) });
-      }
-      break;
-
     case 'FETCH_VL_LEVELS':
       // Fetch levels directly from VL API for a specific symbol
       // If tabId is provided, also draw the levels on that tab
@@ -282,16 +223,6 @@ function handleMessage(message, sender, sendResponse) {
         .catch(err => sendResponse({ success: false, error: err.message }));
       return true; // Async response
 
-    case 'CLEAR_LEVELS':
-      if (message.symbol) {
-        tradeLevels.delete(message.symbol.toUpperCase());
-      } else {
-        tradeLevels.clear();
-      }
-      saveLevels();
-      sendResponse({ success: true });
-      break;
-
     case 'SET_DEBUG':
       debugMode = message.enabled;
       console.log('🔧 Debug mode:', debugMode);
@@ -299,11 +230,7 @@ function handleMessage(message, sender, sendResponse) {
       break;
 
     case 'GET_STATUS':
-      sendResponse({
-        levelCount: Array.from(tradeLevels.values()).flat().length,
-        symbols: Array.from(tradeLevels.keys()),
-        debugMode
-      });
+      sendResponse({ debugMode });
       break;
 
     case 'CHECK_VL_AUTH':
@@ -540,14 +467,17 @@ async function fetchVlLevels(ticker) {
       };
     }
 
-    // Clear existing levels for this ticker before adding new ones
-    tradeLevels.delete(ticker);
+    const levels = json.data.map(item => ({
+      price: item.Price || item.price,
+      symbol: (item.Ticker || ticker).toUpperCase(),
+      rank: item.TradeLevelRank || item.rank,
+      dollars: item.Dollars || item.dollars,
+      volume: item.Volume || item.volume,
+      trades: item.Trades || item.trades,
+      dates: item.Dates || item.dates
+    })).filter(l => l.price && typeof l.price === 'number');
 
-    // Process and store the levels
-    extractLevels(`direct-fetch:${ticker}`, json.data);
-
-    // Return the levels for immediate use
-    const levels = tradeLevels.get(ticker) || [];
+    console.log(`📊 Fetched ${levels.length} levels for ${ticker}`);
 
     return {
       success: true,
@@ -634,12 +564,11 @@ async function fetchAndDraw(symbol, tabId = null, drawOptions = {}) {
 /**
  * Fetch large trades from VolumeLeaders API (for circles)
  */
-async function fetchVlTrades(ticker, tradeCount = 10) {
+async function fetchVlTrades(ticker, tradeCount = 10, visibleRange = null) {
   if (!ticker) {
     throw new Error('No ticker symbol provided');
   }
 
-  // Translate TV ticker format to VL format (e.g., BRK.B -> BRKB)
   const originalTicker = ticker;
   ticker = tickerMap.tvToVl(ticker);
   if (ticker !== originalTicker.toUpperCase()) {
@@ -647,24 +576,27 @@ async function fetchVlTrades(ticker, tradeCount = 10) {
   }
   console.log(`🔍 Fetching VL trades for ${ticker}...`);
 
-  // Get user's settings for date range (same setting as trade levels)
-  const settings = await browser.storage.local.get(['yearRange']);
-  const yearRange = settings.yearRange ?? 5; // Default 5 years
-
-  // Check authentication first
   const auth = await checkVlAuth();
   if (!auth.authenticated) {
     throw new Error('Not logged into VolumeLeaders. Please log in at volumeleaders.com first.');
   }
 
-  // Get XSRF token for anti-forgery validation
   const token = await getXsrfToken();
 
-  // Build the request body (DataTables format for GetTrades)
-  const now = new Date();
-  const today = now.toISOString().split('T')[0];
-  const startDate = new Date(now.getFullYear() - yearRange, now.getMonth(), now.getDate())
-    .toISOString().split('T')[0];
+  let startDate, endDate;
+  if (visibleRange && visibleRange.from && visibleRange.to) {
+    startDate = new Date(visibleRange.from * 1000).toISOString().split('T')[0];
+    endDate = new Date(visibleRange.to * 1000).toISOString().split('T')[0];
+    console.log(`📅 Using chart visible range: ${startDate} to ${endDate}`);
+  } else {
+    const settings = await browser.storage.local.get(['yearRange']);
+    const yearRange = settings.yearRange ?? 5;
+    const now = new Date();
+    endDate = now.toISOString().split('T')[0];
+    startDate = new Date(now.getFullYear() - yearRange, now.getMonth(), now.getDate())
+      .toISOString().split('T')[0];
+    console.log(`📅 Using default range (${yearRange}yr): ${startDate} to ${endDate}`);
+  }
 
   const params = new URLSearchParams({
     'draw': '1',
@@ -718,7 +650,7 @@ async function fetchVlTrades(ticker, tradeCount = 10) {
     'search[regex]': 'false',
     'Tickers': ticker,
     'StartDate': startDate,
-    'EndDate': today,
+    'EndDate': endDate,
     'MinVolume': '0',
     'MaxVolume': '2000000000',
     'MinPrice': '0',
@@ -802,9 +734,7 @@ async function fetchVlTrades(ticker, tradeCount = 10) {
       };
     });
 
-    // Store in largeTrades map
-    largeTrades.set(ticker, trades);
-    console.log(`✅ Stored ${trades.length} trades for ${ticker}`);
+    console.log(`📊 Fetched ${trades.length} trades for ${ticker}`);
 
     return {
       success: true,
@@ -819,35 +749,44 @@ async function fetchVlTrades(ticker, tradeCount = 10) {
   }
 }
 
-/**
- * Fetch VL trades and optionally draw circles on a tab
- */
 async function fetchAndDrawTrades(symbol, tabId = null, tradeCount = 5) {
-  // Step 1: Fetch the trades
-  const fetchResult = await fetchVlTrades(symbol, tradeCount);
+  let visibleRange = null;
+
+  if (tabId) {
+    try {
+      const rangeResponse = await browser.tabs.sendMessage(tabId, { type: 'GET_VISIBLE_RANGE' });
+      visibleRange = rangeResponse?.range;
+      if (visibleRange) {
+        console.log(`📅 BACKGROUND: Chart visible range: ${new Date(visibleRange.from * 1000).toISOString().split('T')[0]} to ${new Date(visibleRange.to * 1000).toISOString().split('T')[0]}`);
+      }
+    } catch (err) {
+      console.warn('⚠️ Could not get visible range, using default date range');
+    }
+  }
+
+  const fetchResult = await fetchVlTrades(symbol, tradeCount, visibleRange);
 
   if (!fetchResult.success || fetchResult.trades.length === 0) {
     return fetchResult;
   }
 
-  // Step 2: If tabId provided, draw the circles
   if (tabId) {
     try {
-      console.log(`🔵 BACKGROUND: Drawing ${fetchResult.trades.length} trade circles on tab ${tabId}`);
+      console.log(`📝 BACKGROUND: Drawing ${fetchResult.trades.length} trade notes on tab ${tabId}`);
 
       const drawResponse = await browser.tabs.sendMessage(tabId, {
-        type: 'DRAW_CIRCLES',
+        type: 'DRAW_NOTES',
         trades: fetchResult.trades
       });
 
-      console.log(`🔵 BACKGROUND: Circle draw complete:`, drawResponse);
+      console.log(`📝 BACKGROUND: Note draw complete:`, drawResponse);
 
       return {
         ...fetchResult,
         drawResult: drawResponse
       };
     } catch (err) {
-      console.error('❌ BACKGROUND: Failed to draw circles:', err);
+      console.error('❌ BACKGROUND: Failed to draw notes:', err);
       return {
         ...fetchResult,
         drawResult: { success: false, error: err.message }

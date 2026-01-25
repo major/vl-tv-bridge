@@ -17,8 +17,8 @@
       <div id="status" class="status"></div>
     </header>
 
-    <!-- Main Action Section -->
-    <section id="main-action" class="section hero">
+    <!-- Status Section -->
+    <section id="status-section" class="section hero">
       <div id="tv-status" class="tv-status">
         <span class="indicator"></span>
         <span class="text">Checking TradingView...</span>
@@ -31,77 +31,35 @@
         <span class="text">Checking VL login...</span>
       </div>
 
-      <button id="fetch-draw-btn" class="btn primary large" disabled>
-        🚀 Fetch & Draw VL Levels
-      </button>
-
-      <button id="fetch-trades-btn" class="btn secondary large" disabled>
-        ⭕ Fetch & Draw Large Trades
-      </button>
-
       <div class="button-row">
-        <button id="clear-chart-btn" class="btn secondary" disabled>
-          🗑️ Clear Chart
+        <button id="fetch-draw-btn" class="btn primary" disabled>
+          📈 Draw Levels
         </button>
-        <button id="refresh-btn" class="btn secondary">
-          🔄 Refresh
+        <button id="fetch-trades-btn" class="btn primary" disabled>
+          📝 Draw Trades
         </button>
       </div>
+
+      <button id="clear-chart-btn" class="btn secondary full-width" disabled>
+        🗑️ Clear Chart
+      </button>
     </section>
 
-    <!-- Cached Levels Section -->
-    <section id="levels-section" class="section collapsible">
-      <h2 class="section-header" data-toggle="levels-content">
-        Cached Levels <span id="level-count" class="badge">0</span>
-        <span class="chevron">▼</span>
-      </h2>
-      <div id="levels-content" class="section-content collapsed">
-        <div id="levels-list" class="levels-list">
-          <div class="empty">No levels cached yet.</div>
-        </div>
-        <div class="button-row">
-          <button id="draw-cached-btn" class="btn small" disabled>Draw Cached</button>
-          <button id="clear-cache-btn" class="btn small text">Clear Cache</button>
-        </div>
-      </div>
-    </section>
+    <!-- Tab Navigation -->
+    <div class="settings-label">⚙️ Settings</div>
+    <nav class="tabs">
+      <button class="tab active" data-tab="levels">📈 Levels</button>
+      <button class="tab" data-tab="trades">📝 Trades</button>
+    </nav>
 
-    <!-- Manual Entry Section -->
-    <section class="section collapsible">
-      <h2 class="section-header" data-toggle="manual-content">
-        Manual Entry
-        <span class="chevron">▼</span>
-      </h2>
-      <div id="manual-content" class="section-content collapsed">
-        <div class="input-group">
-          <input type="text" id="symbol-input" placeholder="Symbol (e.g., AAPL)">
-          <input type="number" id="price-input" placeholder="Price" step="0.01">
-          <button id="add-btn" class="btn small">+ Add</button>
-        </div>
-      </div>
-    </section>
-
-    <!-- Settings Section -->
-    <section class="section collapsible">
-      <h2 class="section-header" data-toggle="settings-content">
-        ⚙️ Settings
-        <span class="chevron">▼</span>
-      </h2>
-      <div id="settings-content" class="section-content collapsed">
+    <!-- Levels Tab -->
+    <div id="levels-tab" class="tab-content active">
+      <div class="settings-panel">
         <div class="setting-row">
-          <label for="level-count-select">Number of VL levels:</label>
+          <label for="level-count-select">Number of levels:</label>
           <select id="level-count-select" class="setting-select">
             <option value="5">5 levels</option>
             <option value="10" selected>10 levels</option>
-          </select>
-        </div>
-        <div class="setting-row">
-          <label for="trade-count-select">Number of large trades:</label>
-          <select id="trade-count-select" class="setting-select">
-            <option value="5" selected>5 trades</option>
-            <option value="10">10 trades</option>
-            <option value="15">15 trades</option>
-            <option value="20">20 trades</option>
           </select>
         </div>
         <div class="setting-row">
@@ -134,7 +92,7 @@
         </div>
         <div class="setting-row">
           <label for="line-color-input">Line color:</label>
-          <input type="text" id="line-color-input" class="setting-text" value="#02A9DE" placeholder="#02A9DE" maxlength="7">
+          <input type="text" id="line-color-input" class="setting-text" value="#2962FF" placeholder="#2962FF" maxlength="7">
         </div>
         <div class="setting-row">
           <label for="line-thickness-select">Line thickness:</label>
@@ -153,7 +111,22 @@
           </label>
         </div>
       </div>
-    </section>
+    </div>
+
+    <!-- Trades Tab -->
+    <div id="trades-tab" class="tab-content">
+      <div class="settings-panel">
+        <div class="setting-row">
+          <label for="trade-count-select">Number of trades:</label>
+          <select id="trade-count-select" class="setting-select">
+            <option value="5" selected>5 trades</option>
+            <option value="10">10 trades</option>
+            <option value="15">15 trades</option>
+            <option value="20">20 trades</option>
+          </select>
+        </div>
+      </div>
+    </div>
 
     <footer>
       <label class="toggle">

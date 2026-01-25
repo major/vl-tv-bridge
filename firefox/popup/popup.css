@@ -46,6 +46,62 @@ header h1 {
   color: #888;
 }
 
+.settings-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+  margin-top: 4px;
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  background: #252542;
+  padding: 4px;
+  border-radius: 8px;
+}
+
+.tab {
+  flex: 1;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #888;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tab:hover {
+  color: #ccc;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.tab.active {
+  background: #02A9DE;
+  color: white;
+}
+
+.tab-content {
+  display: none;
+}
+
+.tab-content.active {
+  display: block;
+}
+
+.settings-panel {
+  background: #252542;
+  border-radius: 8px;
+  padding: 12px;
+}
+
 .section {
   margin-bottom: 12px;
 }
@@ -224,6 +280,10 @@ header h1 {
 
 .btn.text:hover {
   color: #f44336;
+}
+
+.btn.full-width {
+  width: 100%;
 }
 
 /* Levels List */

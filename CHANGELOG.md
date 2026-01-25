@@ -3,6 +3,12 @@
 All notable changes to VL-TV Bridge.
 
 
+## [1.6.0](///compare/v1.5.2...v1.6.0) (2026-01-25)
+
+### Bug Fixes
+
+* add XSRF token handling for ASP.NET anti-forgery f33c5a6
+
 ## [1.3.0](///compare/v1.2.1...v1.3.0) (2025-12-20)
 
 ### Features

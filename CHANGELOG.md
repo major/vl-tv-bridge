@@ -3,6 +3,12 @@
 All notable changes to VL-TV Bridge.
 
 
+## [1.7.0](///compare/v1.6.0...v1.7.0) (2026-01-25)
+
+### Features
+
+* **injected:** replace circles with text_note shapes 650329a, closes #1
+
 ## [1.6.0](///compare/v1.5.2...v1.6.0) (2026-01-25)
 
 ### Bug Fixes

@@ -57,8 +57,8 @@ if (window !== window.top) {
           .catch(err => sendResponse({ success: false, error: err.message }));
         return true;
 
-      case 'DRAW_CIRCLES':
-        drawCircles(message.trades, message.options)
+      case 'DRAW_NOTES':
+        drawNotes(message.trades, message.options)
           .then(result => sendResponse(result))
           .catch(err => sendResponse({ success: false, error: err.message }));
         return true;
@@ -73,6 +73,12 @@ if (window !== window.top) {
         getCurrentSymbol()
           .then(symbol => sendResponse({ symbol }))
           .catch(() => sendResponse({ symbol: null }));
+        return true;
+
+      case 'GET_VISIBLE_RANGE':
+        sendToInjected('GET_VISIBLE_RANGE')
+          .then(range => sendResponse({ range }))
+          .catch(() => sendResponse({ range: null }));
         return true;
     }
   });
@@ -230,34 +236,37 @@ if (window !== window.top) {
     };
   }
 
-  /**
-   * Draw trade circles on the chart
-   * Each circle represents a large trade with position (price, time) and rank label
-   */
-  async function drawCircles(trades, options = {}) {
-    console.log(`🔵 CONTENT: drawCircles called with ${trades.length} trades`);
+  async function drawNotes(trades, options = {}) {
+    console.log(`📝 CONTENT: drawNotes called with ${trades.length} trades`);
 
-    // Clear existing VL circles first (keeps horizontal lines intact)
     try {
-      const clearResult = await sendToInjected('CLEAR_VL_CIRCLES');
-      console.log(`🧹 Cleared ${clearResult.removed} existing VL circles`);
+      const clearResult = await sendToInjected('CLEAR_VL_NOTES');
+      console.log(`🧹 Cleared ${clearResult.removed} existing VL notes`);
     } catch (err) {
-      console.warn('Could not clear existing VL circles:', err);
+      console.warn('Could not clear existing VL notes:', err);
     }
 
     const results = [];
 
     for (const trade of trades) {
       try {
-        const result = await sendToInjected('DRAW_CIRCLE', {
+        const result = await sendToInjected('DRAW_NOTE', {
           price: trade.price,
           timestamp: trade.timestamp,
           rank: trade.rank,
           darkPool: trade.darkPool,
+          dollarVolume: trade.dollarVolume,
           options: options
         });
 
-        if (result.shapeId) {
+        if (result.skipped) {
+          results.push({
+            price: trade.price,
+            rank: trade.rank,
+            skipped: true,
+            reason: result.reason
+          });
+        } else if (result.shapeId) {
           drawnShapeIds.push(result.shapeId);
           results.push({
             price: trade.price,
@@ -265,12 +274,11 @@ if (window !== window.top) {
             rank: trade.rank,
             darkPool: trade.darkPool,
             shapeId: result.shapeId,
-            isOffChart: result.isOffChart || false,
             success: true
           });
         }
       } catch (err) {
-        console.error(`❌ Failed to draw circle for trade #${trade.rank}:`, err);
+        console.error(`❌ Failed to draw note for trade #${trade.rank}:`, err);
         results.push({
           price: trade.price,
           rank: trade.rank,
@@ -280,21 +288,20 @@ if (window !== window.top) {
       }
     }
 
-    // Save drawn shape IDs for cleanup
     await browser.storage.local.set({ drawnShapeIds });
 
     const successCount = results.filter(r => r.success).length;
+    const skippedCount = results.filter(r => r.skipped).length;
     const dpCount = results.filter(r => r.success && r.darkPool).length;
     const litCount = successCount - dpCount;
-    const offChartCount = results.filter(r => r.success && r.isOffChart).length;
 
     return {
       success: true,
       drawn: successCount,
-      failed: results.filter(r => !r.success).length,
+      skipped: skippedCount,
+      failed: results.filter(r => !r.success && !r.skipped).length,
       darkPoolCount: dpCount,
       litCount: litCount,
-      offChartCount: offChartCount,
       results
     };
   }

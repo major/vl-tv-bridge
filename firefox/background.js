@@ -17,6 +17,8 @@ const VL_API_PATTERNS = [
 let tradeLevels = new Map(); // symbol -> levels[]
 let largeTrades = new Map(); // symbol -> trades[] (for circles)
 let debugMode = true; // Log all intercepted requests initially
+let xsrfToken = null; // Cached XSRF token for API requests
+let xsrfTokenExpiry = 0; // Token expiry timestamp (refresh every 30 min)
 
 /**
  * Initialize extension
@@ -340,6 +342,59 @@ async function checkVlAuth() {
 }
 
 /**
+ * Fetch XSRF token from VolumeLeaders page
+ * ASP.NET anti-forgery requires this token in X-XSRF-TOKEN header
+ */
+async function getXsrfToken(forceRefresh = false) {
+  const TOKEN_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+  if (!forceRefresh && xsrfToken && Date.now() < xsrfTokenExpiry) {
+    console.log('🔑 Using cached XSRF token');
+    return xsrfToken;
+  }
+
+  console.log('🔑 Fetching fresh XSRF token from VL...');
+
+  try {
+    const response = await fetch('https://www.volumeleaders.com/TradeLevels?Ticker=SPY', {
+      method: 'GET',
+      credentials: 'include',
+      redirect: 'follow'
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch VL page: ${response.status}`);
+    }
+
+    if (response.url.includes('/Login')) {
+      throw new Error('Please log in to VolumeLeaders.com first, then try again');
+    }
+
+    const html = await response.text();
+
+    if (html.includes('Welcome Back') && html.includes('Login')) {
+      throw new Error('Please log in to VolumeLeaders.com first, then try again');
+    }
+
+    // Extract token from hidden input: <input name="__RequestVerificationToken" ... value="TOKEN" />
+    const tokenMatch = html.match(/name="__RequestVerificationToken"[^>]*value="([^"]+)"/);
+    if (!tokenMatch) {
+      throw new Error('Please log in to VolumeLeaders.com first, then try again');
+    }
+
+    xsrfToken = tokenMatch[1];
+    xsrfTokenExpiry = Date.now() + TOKEN_TTL_MS;
+
+    console.log('🔑 Got fresh XSRF token:', xsrfToken.substring(0, 20) + '...');
+    return xsrfToken;
+
+  } catch (err) {
+    console.error('❌ Failed to get XSRF token:', err);
+    throw err;
+  }
+}
+
+/**
  * Fetch trade levels directly from VolumeLeaders API
  */
 async function fetchVlLevels(ticker) {
@@ -365,6 +420,9 @@ async function fetchVlLevels(ticker) {
   if (!auth.authenticated) {
     throw new Error('Not logged into VolumeLeaders. Please log in at volumeleaders.com first.');
   }
+
+  // Get XSRF token for anti-forgery validation
+  const token = await getXsrfToken();
 
   // Build the request body (DataTables format)
   const now = new Date();
@@ -447,9 +505,11 @@ async function fetchVlLevels(ticker) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
-        'Accept': 'application/json'
+        'Accept': 'application/json',
+        'X-XSRF-TOKEN': token,
+        'X-Requested-With': 'XMLHttpRequest'
       },
-      credentials: 'include', // Include cookies
+      credentials: 'include',
       body: params.toString()
     });
 
@@ -458,6 +518,12 @@ async function fetchVlLevels(ticker) {
     if (!response.ok) {
       if (response.status === 401 || response.status === 403) {
         throw new Error('VolumeLeaders session expired. Please log in again.');
+      }
+      if (response.status === 400) {
+        // Token might be stale - invalidate and let caller retry
+        xsrfToken = null;
+        xsrfTokenExpiry = 0;
+        throw new Error('XSRF token rejected - please try again');
       }
       throw new Error(`VL API error: ${response.status} ${response.statusText}`);
     }
@@ -591,6 +657,9 @@ async function fetchVlTrades(ticker, tradeCount = 10) {
     throw new Error('Not logged into VolumeLeaders. Please log in at volumeleaders.com first.');
   }
 
+  // Get XSRF token for anti-forgery validation
+  const token = await getXsrfToken();
+
   // Build the request body (DataTables format for GetTrades)
   const now = new Date();
   const today = now.toISOString().split('T')[0];
@@ -680,7 +749,9 @@ async function fetchVlTrades(ticker, tradeCount = 10) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
-        'Accept': 'application/json'
+        'Accept': 'application/json',
+        'X-XSRF-TOKEN': token,
+        'X-Requested-With': 'XMLHttpRequest'
       },
       credentials: 'include',
       body: params.toString()
@@ -691,6 +762,11 @@ async function fetchVlTrades(ticker, tradeCount = 10) {
     if (!response.ok) {
       if (response.status === 401 || response.status === 403) {
         throw new Error('VolumeLeaders session expired. Please log in again.');
+      }
+      if (response.status === 400) {
+        xsrfToken = null;
+        xsrfTokenExpiry = 0;
+        throw new Error('XSRF token rejected - please try again');
       }
       throw new Error(`VL API error: ${response.status} ${response.statusText}`);
     }

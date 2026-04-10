@@ -2,8 +2,13 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:recommended",
+    ":separateMajorReleases",
+    ":combinePatchMinorReleases",
+    ":enableVulnerabilityAlertsWithLabel('security')",
     ":semanticCommits",
     ":semanticCommitTypeAll(chore)",
+    ":automergeMinor",
+    ":automergeDigest",
     "group:allNonMajor"
   ],
   "labels": ["dependencies"],
@@ -14,15 +19,15 @@
   },
   "packageRules": [
     {
-      "description": "Automerge non-major devDependency updates",
-      "matchDepTypes": ["devDependencies"],
-      "matchUpdateTypes": ["minor", "patch"],
-      "automerge": true
-    },
-    {
       "description": "Group release-it packages",
       "matchPackagePatterns": ["^release-it", "^@release-it/"],
       "groupName": "release-it"
+    },
+    {
+      "description": "Require approval for major updates",
+      "matchUpdateTypes": ["major"],
+      "automerge": false
     }
-  ]
+  ],
+  "schedule": ["before 6am on monday"]
 }

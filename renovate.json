@@ -20,8 +20,11 @@
   "packageRules": [
     {
       "description": "Group release-it packages",
-      "matchPackagePatterns": ["^release-it", "^@release-it/"],
-      "groupName": "release-it"
+      "groupName": "release-it",
+      "matchPackageNames": [
+        "/^release-it/",
+        "/^@release-it//"
+      ]
     },
     {
       "description": "Require approval for major updates",

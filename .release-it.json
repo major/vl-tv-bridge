@@ -9,11 +9,7 @@
   "github": {
     "release": true,
     "releaseName": "v${version}",
-    "autoGenerate": true,
-    "assets": [
-      "build/vl-tv-bridge-*.zip",
-      "build/vl-tv-bridge-*-signed.xpi"
-    ]
+    "autoGenerate": true
   },
   "hooks": {
     "before:init": ["npm run lint"],
@@ -21,7 +17,6 @@
       "node -e \"const fs=require('fs');const pkg=require('./package.json');const manifest=require('./firefox/manifest.json');manifest.version=pkg.version;fs.writeFileSync('./firefox/manifest.json',JSON.stringify(manifest,null,2)+'\\n')\"",
       "git add firefox/manifest.json"
     ],
-    "before:github:release": ["npm run build"],
     "after:release": "echo 🎉 Release ${version} published to GitHub!"
   },
   "npm": {

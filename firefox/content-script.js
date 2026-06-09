@@ -255,7 +255,8 @@ if (window !== window.top) {
           timestamp: trade.timestamp,
           rank: trade.rank,
           darkPool: trade.darkPool,
-          dollarVolume: trade.dollarVolume,
+          sweep: trade.sweep,
+          dollarVolume: trade.dollarVolume ?? trade.dollars,
           options: options
         });
 

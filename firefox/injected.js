@@ -291,11 +291,8 @@
   }
 
   /**
-   * Draw a text note on the chart for a large trade
-   * Uses createShape with a single point (price + time)
-   *
-   * If the trade's timestamp is before the visible chart range,
-   * draws at the left edge with a "←" indicator in the label
+   * Draw a horizontal ray on the chart for a large trade.
+   * Uses the actual trade timestamp as the ray start point.
    */
   async function drawNote(data) {
     const chart = getChartApi();
@@ -305,7 +302,7 @@
       throw new Error(error);
     }
 
-    const { price, timestamp, rank, darkPool, dollarVolume, options = {} } = data;
+    const { price, timestamp, rank, darkPool, sweep, dollarVolume, options = {} } = data;
 
     const visibleRange = getVisibleTimeRange();
     if (visibleRange) {
@@ -316,8 +313,8 @@
     }
 
     const color = darkPool
-      ? (options.darkPoolColor || 'rgba(255, 152, 0, 1)')
-      : (options.litColor || 'rgba(41, 98, 255, 1)');
+      ? (options.tradeDarkPoolColor || 'rgba(255, 152, 0, 1)')
+      : (options.tradeLitColor || 'rgba(41, 98, 255, 1)');
 
     let volLabel = '';
     if (dollarVolume) {
@@ -328,47 +325,40 @@
       }
     }
 
-    const labelText = `VL #${rank}${volLabel}`;
-
-    const textColor = darkPool ? 'rgba(0, 0, 0, 1)' : 'rgba(255, 255, 255, 1)';
+    const marker = sweep ? '◆' : '●';
+    const labelText = `${marker} VL #${rank}${volLabel}`;
 
     const overrides = {
-      lineColor: color,
-      backgroundColor: color,
-      textColor: options.textColor || textColor,
-      drawBackground: true,
-      drawBorder: false,
-      fontSize: options.fontSize || 14,
+      linecolor: color,
+      linewidth: options.tradeThickness || 2,
+      linestyle: options.linestyle || 0,
+      showLabel: true,
+      textcolor: options.textcolor || color,
+      fontsize: options.fontsize || 12,
       bold: options.bold !== false
     };
 
     const shapeConfig = {
-      shape: 'text_note',
+      shape: 'horizontal_ray',
       text: labelText,
       zOrder: 'top',
       overrides: overrides
     };
 
-    // Two points: [0] = anchor on bar, [1] = note label position (down-right like IRE #2)
-    const points = [
-      { price: price, time: timestamp },
-      { price: price * 0.92, time: timestamp + 6 * 24 * 60 * 60 }
-    ];
-
-    console.log(`📝 INJECTED v2: shape=${shapeConfig.shape}, price=$${price.toFixed(2)}, time=${timestamp}, rank=#${rank}`);
+    console.log(`📝 INJECTED v3: shape=${shapeConfig.shape}, price=$${price.toFixed(2)}, time=${timestamp}, rank=#${rank}`);
 
     try {
-      const shapeId = await chart.createMultipointShape(points, shapeConfig);
+      const shapeId = await chart.createShape({ price: price, time: timestamp }, shapeConfig);
 
       if (!shapeId) {
         console.warn('⚠️ createShape returned falsy value:', shapeId);
         throw new Error('createShape returned no ID');
       }
 
-      console.log(`✅ Drew note at $${price.toFixed(2)}, ID: ${shapeId}`);
+      console.log(`✅ Drew trade ray at $${price.toFixed(2)}, ID: ${shapeId}`);
       return { shapeId, price, timestamp, rank };
     } catch (err) {
-      console.error('❌ Failed to draw note at', price);
+      console.error('❌ Failed to draw trade ray at', price);
       console.error('❌ Error:', err.message || err);
       throw err;
     }
@@ -495,8 +485,8 @@
   }
 
   /**
-   * Remove only VL text_note shapes (not horizontal lines)
-   * This clears previous VL notes before drawing new ones
+   * Remove only VL trade marker shapes (not horizontal lines).
+   * Clears current horizontal rays and legacy text notes before drawing new trades.
    */
   async function clearVlNotes() {
     const chart = getChartApi();
@@ -506,11 +496,11 @@
 
     try {
       const allShapes = chart.getAllShapes();
-      console.log(`🔍 Checking ${allShapes.length} shapes for VL notes...`);
+      console.log(`🔍 Checking ${allShapes.length} shapes for VL trade markers...`);
 
       for (const shape of allShapes) {
         try {
-          if (shape.name !== 'text_note') continue;
+          if (shape.name !== 'horizontal_ray' && shape.name !== 'text_note') continue;
 
           const shapeObj = chart.getShapeById(shape.id);
           if (!shapeObj) continue;
@@ -518,21 +508,25 @@
           const props = shapeObj.getProperties ? shapeObj.getProperties() : null;
           const text = props?.text || '';
 
-          if (text.startsWith('VL')) {
+          if (isVlTradeText(text)) {
             chart.removeEntity(shape.id);
             removed++;
-            console.log(`🗑️ Removed VL note: ${shape.id} ("${text}")`);
+            console.log(`🗑️ Removed VL trade marker: ${shape.id} ("${text}")`);
           }
         } catch (e) {
           // Shape might not have text or be accessible
         }
       }
     } catch (e) {
-      console.error('Error clearing VL notes:', e);
+      console.error('Error clearing VL trade markers:', e);
     }
 
-    console.log(`✅ Cleared ${removed} VL notes`);
+    console.log(`✅ Cleared ${removed} VL trade markers`);
     return { removed };
+  }
+
+  function isVlTradeText(text) {
+    return text.startsWith('VL') || text.startsWith('● VL') || text.startsWith('◆ VL');
   }
 
   /**

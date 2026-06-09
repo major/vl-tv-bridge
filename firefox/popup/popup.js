@@ -56,6 +56,9 @@ const elements = {
   debugToggle: document.getElementById('debug-toggle'),
   levelCountSelect: document.getElementById('level-count-select'),
   tradeCountSelect: document.getElementById('trade-count-select'),
+  tradeLitColorInput: document.getElementById('trade-lit-color-input'),
+  tradeDarkPoolColorInput: document.getElementById('trade-dark-pool-color-input'),
+  tradeThicknessSelect: document.getElementById('trade-thickness-select'),
   yearRangeSelect: document.getElementById('year-range-select'),
   clusteringToggle: document.getElementById('clustering-toggle'),
   thresholdSelect: document.getElementById('threshold-select'),
@@ -95,11 +98,14 @@ async function init() {
   // Load settings
   const stored = await browser.storage.local.get([
     'debugMode', 'levelCount', 'tradeCount', 'yearRange', 'clusteringEnabled', 'clusterThreshold',
-    'lineColor', 'lineThickness', 'showDates'
+    'lineColor', 'lineThickness', 'showDates', 'tradeLitColor', 'tradeDarkPoolColor', 'tradeThickness'
   ]);
   elements.debugToggle.checked = stored.debugMode || false;
   elements.levelCountSelect.value = stored.levelCount ?? 10;
   elements.tradeCountSelect.value = stored.tradeCount ?? 5;
+  elements.tradeLitColorInput.value = stored.tradeLitColor ?? '#2962FF';
+  elements.tradeDarkPoolColorInput.value = stored.tradeDarkPoolColor ?? '#FF9800';
+  elements.tradeThicknessSelect.value = stored.tradeThickness ?? 2;
   elements.yearRangeSelect.value = stored.yearRange ?? 5;
   elements.clusteringToggle.checked = stored.clusteringEnabled !== false; // Default true
   elements.thresholdSelect.value = stored.clusterThreshold ?? 1.0;
@@ -286,16 +292,22 @@ async function fetchAndDrawTrades() {
   elements.status.textContent = `Fetching large trades for ${currentSymbol}...`;
 
   try {
-    // Get trade count setting
-    const stored = await browser.storage.local.get(['tradeCount']);
-    const tradeCount = stored.tradeCount ?? 5;
+    const tradeCount = parseInt(elements.tradeCountSelect?.value, 10) || 5;
+    const tradeLitColor = normalizeColorForDraw(elements.tradeLitColorInput?.value, '#2962FF');
+    const tradeDarkPoolColor = normalizeColorForDraw(elements.tradeDarkPoolColorInput?.value, '#FF9800');
+    const tradeThickness = parseInt(elements.tradeThicknessSelect?.value, 10) || 2;
 
     // Send fetch request with tabId - background script handles drawing
     const response = await browser.runtime.sendMessage({
       type: 'FETCH_VL_TRADES',
       symbol: currentSymbol,
       tabId: currentTabId,
-      tradeCount: tradeCount
+      tradeCount: tradeCount,
+      drawOptions: {
+        tradeLitColor,
+        tradeDarkPoolColor,
+        tradeThickness
+      }
     });
 
     if (!response.success) {
@@ -374,6 +386,53 @@ async function handleTradeCountChange() {
   const tradeCount = parseInt(elements.tradeCountSelect.value, 10);
   await browser.storage.local.set({ tradeCount });
   console.log('⚙️ Trade count set to:', tradeCount);
+}
+
+function normalizeColorForDraw(value, fallback) {
+  let color = value?.trim().toUpperCase() || fallback;
+  if (color && !color.startsWith('#')) {
+    color = '#' + color;
+  }
+
+  return /^#[0-9A-F]{6}$/.test(color) ? color : fallback;
+}
+
+async function handleTradeLitColorChange() {
+  let color = elements.tradeLitColorInput.value.trim().toUpperCase();
+
+  if (color && !color.startsWith('#')) {
+    color = '#' + color;
+    elements.tradeLitColorInput.value = color;
+  }
+
+  if (!/^#[0-9A-F]{6}$/.test(color)) {
+    return;
+  }
+
+  await browser.storage.local.set({ tradeLitColor: color });
+  console.log('🎨 Lit trade color set to:', color);
+}
+
+async function handleTradeDarkPoolColorChange() {
+  let color = elements.tradeDarkPoolColorInput.value.trim().toUpperCase();
+
+  if (color && !color.startsWith('#')) {
+    color = '#' + color;
+    elements.tradeDarkPoolColorInput.value = color;
+  }
+
+  if (!/^#[0-9A-F]{6}$/.test(color)) {
+    return;
+  }
+
+  await browser.storage.local.set({ tradeDarkPoolColor: color });
+  console.log('🎨 Dark pool trade color set to:', color);
+}
+
+async function handleTradeThicknessChange() {
+  const thickness = parseInt(elements.tradeThicknessSelect.value, 10);
+  await browser.storage.local.set({ tradeThickness: thickness });
+  console.log('⚙️ Trade thickness set to:', thickness);
 }
 
 /**
@@ -472,6 +531,9 @@ function setupEventListeners() {
   elements.lineColorInput.addEventListener('input', handleLineColorChange);
   elements.lineThicknessSelect.addEventListener('change', handleLineThicknessChange);
   elements.showDatesToggle.addEventListener('change', handleShowDatesToggle);
+  elements.tradeLitColorInput.addEventListener('input', handleTradeLitColorChange);
+  elements.tradeDarkPoolColorInput.addEventListener('input', handleTradeDarkPoolColorChange);
+  elements.tradeThicknessSelect.addEventListener('change', handleTradeThicknessChange);
 
   // Tab switching
   document.querySelectorAll('.tab').forEach(tab => {

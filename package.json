@@ -3,6 +3,7 @@
   "version": "1.7.0",
   "description": "Draw VolumeLeaders trade levels on TradingView charts",
   "scripts": {
+    "test": "node --test",
     "build": "web-ext build --source-dir=firefox --artifacts-dir=build --overwrite-dest && npm run rename-artifacts",
     "rename-artifacts": "VERSION=$(node -p \"require('./firefox/manifest.json').version\") && mv build/vl_tradingview_bridge-$VERSION.zip build/vl-tv-bridge-$VERSION.zip && cp build/vl-tv-bridge-$VERSION.zip build/vl-tv-bridge-$VERSION.xpi",
     "sign": "web-ext sign --source-dir=firefox --artifacts-dir=build --channel=unlisted --api-key=$WEB_EXT_API_KEY --api-secret=$WEB_EXT_API_SECRET",
@@ -15,8 +16,8 @@
     "release:dry": "release-it --dry-run"
   },
   "devDependencies": {
-    "@release-it/conventional-changelog": "^10.0.2",
-    "release-it": "^19.0.6",
+    "@release-it/conventional-changelog": "10.0.2",
+    "release-it": "19.0.6",
     "web-ext": "^8.3.0"
   },
   "repository": {

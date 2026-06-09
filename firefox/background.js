@@ -13,6 +13,8 @@ const VL_API_PATTERNS = [
   '*://volumeleaders.com/api/*'
 ];
 
+const VL_TRADES_TIMEOUT_MS = 60000;
+
 let debugMode = true;
 let xsrfToken = null;
 let xsrfTokenExpiry = 0;
@@ -218,7 +220,7 @@ function handleMessage(message, sender, sendResponse) {
     case 'FETCH_VL_TRADES':
       // Fetch large trades from VL API for circles
       // If tabId is provided, also draw the circles on that tab
-      fetchAndDrawTrades(message.symbol, message.tabId, message.tradeCount)
+      fetchAndDrawTrades(message.symbol, message.tabId, message.tradeCount, message.drawOptions)
         .then(result => sendResponse(result))
         .catch(err => sendResponse({ success: false, error: err.message }));
       return true; // Async response
@@ -324,7 +326,7 @@ async function getXsrfToken(forceRefresh = false) {
 /**
  * Fetch trade levels directly from VolumeLeaders API
  */
-async function fetchVlLevels(ticker) {
+async function fetchVlLevels(ticker, now = new Date()) {
   if (!ticker) {
     throw new Error('No ticker symbol provided');
   }
@@ -338,8 +340,9 @@ async function fetchVlLevels(ticker) {
   console.log(`🔍 Fetching VL levels for ${ticker}...`);
 
   // Get user's settings
-  const settings = await browser.storage.local.get(['levelCount', 'yearRange']);
+  const settings = await browser.storage.local.get(['levelCount', 'tradeCount', 'yearRange']);
   const levelCount = String(settings.levelCount ?? 10);
+  const tradeCount = String(settings.tradeCount ?? 5);
   const yearRange = settings.yearRange ?? 5;
 
   // Check authentication first
@@ -352,91 +355,84 @@ async function fetchVlLevels(ticker) {
   const token = await getXsrfToken();
 
   // Build the request body (DataTables format)
-  const now = new Date();
+  now = now || new Date();
   const today = now.toISOString().split('T')[0];
   const startDate = new Date(now.getFullYear() - yearRange, now.getMonth(), now.getDate())
     .toISOString().split('T')[0];
+  const chartUrl = buildChart0Url(ticker, startDate, today, levelCount, tradeCount);
   const params = new URLSearchParams({
-    'draw': '1',
+    'draw': '2',
     'columns[0][data]': 'Price',
     'columns[0][name]': 'Price',
     'columns[0][searchable]': 'true',
-    'columns[0][orderable]': 'true',
+    'columns[0][orderable]': 'false',
     'columns[0][search][value]': '',
     'columns[0][search][regex]': 'false',
     'columns[1][data]': 'Dollars',
     'columns[1][name]': '$$',
     'columns[1][searchable]': 'true',
-    'columns[1][orderable]': 'true',
+    'columns[1][orderable]': 'false',
     'columns[1][search][value]': '',
     'columns[1][search][regex]': 'false',
     'columns[2][data]': 'Volume',
-    'columns[2][name]': 'Shares',
+    'columns[2][name]': 'Sh',
     'columns[2][searchable]': 'true',
-    'columns[2][orderable]': 'true',
+    'columns[2][orderable]': 'false',
     'columns[2][search][value]': '',
     'columns[2][search][regex]': 'false',
     'columns[3][data]': 'Trades',
     'columns[3][name]': 'Trades',
     'columns[3][searchable]': 'true',
-    'columns[3][orderable]': 'true',
+    'columns[3][orderable]': 'false',
     'columns[3][search][value]': '',
     'columns[3][search][regex]': 'false',
     'columns[4][data]': 'RelativeSize',
     'columns[4][name]': 'RS',
     'columns[4][searchable]': 'true',
-    'columns[4][orderable]': 'true',
+    'columns[4][orderable]': 'false',
     'columns[4][search][value]': '',
     'columns[4][search][regex]': 'false',
     'columns[5][data]': 'CumulativeDistribution',
     'columns[5][name]': 'PCT',
     'columns[5][searchable]': 'true',
-    'columns[5][orderable]': 'true',
+    'columns[5][orderable]': 'false',
     'columns[5][search][value]': '',
     'columns[5][search][regex]': 'false',
     'columns[6][data]': 'TradeLevelRank',
-    'columns[6][name]': 'Level Rank',
+    'columns[6][name]': 'Rank',
     'columns[6][searchable]': 'true',
-    'columns[6][orderable]': 'true',
+    'columns[6][orderable]': 'false',
     'columns[6][search][value]': '',
     'columns[6][search][regex]': 'false',
-    'columns[7][data]': 'Level Date Range',
-    'columns[7][name]': 'Level Date Range',
+    'columns[7][data]': 'Dates',
+    'columns[7][name]': 'Dates',
     'columns[7][searchable]': 'true',
     'columns[7][orderable]': 'false',
     'columns[7][search][value]': '',
     'columns[7][search][regex]': 'false',
-    'order[0][column]': '1',
-    'order[0][dir]': 'DESC',
     'start': '0',
     'length': '-1',
     'search[value]': '',
     'search[regex]': 'false',
+    'StartDate': startDate,
+    'EndDate': today,
     'Ticker': ticker,
-    'MinVolume': '0',
-    'MaxVolume': '2000000000',
-    'MinPrice': '0',
-    'MaxPrice': '100000',
-    'MinDollars': '500000',
-    'MaxDollars': '300000000000',
-    'MinDate': startDate,
-    'MaxDate': today,
-    'VCD': '0',
-    'RelativeSize': '0',
-    'TradeLevelRank': levelCount,
-    'TradeLevelCount': levelCount
+    'Levels': levelCount
   });
 
   try {
-    const response = await fetch('https://www.volumeleaders.com/TradeLevels/GetTradeLevels', {
+    const response = await fetch('https://www.volumeleaders.com/Chart0/GetTradeLevels', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Accept': 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'Accept': 'application/json, text/javascript, */*; q=0.01',
+        'Origin': 'https://www.volumeleaders.com',
+        'Referer': chartUrl,
         'X-XSRF-TOKEN': token,
         'X-Requested-With': 'XMLHttpRequest'
       },
       credentials: 'include',
+      referrer: chartUrl,
       body: params.toString()
     });
 
@@ -564,7 +560,7 @@ async function fetchAndDraw(symbol, tabId = null, drawOptions = {}) {
 /**
  * Fetch large trades from VolumeLeaders API (for circles)
  */
-async function fetchVlTrades(ticker, tradeCount = 10, visibleRange = null) {
+async function fetchVlTrades(ticker, tradeCount = 10, visibleRange = null, now = new Date()) {
   if (!ticker) {
     throw new Error('No ticker symbol provided');
   }
@@ -583,23 +579,23 @@ async function fetchVlTrades(ticker, tradeCount = 10, visibleRange = null) {
 
   const token = await getXsrfToken();
 
-  let startDate, endDate;
+  let yearRange = 5;
+  if (!visibleRange || !visibleRange.from || !visibleRange.to) {
+    const settings = await browser.storage.local.get(['yearRange']);
+    yearRange = settings.yearRange ?? 5;
+  }
+
+  const { startDate, endDate } = getTradeDateRange(visibleRange, yearRange, now);
   if (visibleRange && visibleRange.from && visibleRange.to) {
-    startDate = new Date(visibleRange.from * 1000).toISOString().split('T')[0];
-    endDate = new Date(visibleRange.to * 1000).toISOString().split('T')[0];
     console.log(`📅 Using chart visible range: ${startDate} to ${endDate}`);
   } else {
-    const settings = await browser.storage.local.get(['yearRange']);
-    const yearRange = settings.yearRange ?? 5;
-    const now = new Date();
-    endDate = now.toISOString().split('T')[0];
-    startDate = new Date(now.getFullYear() - yearRange, now.getMonth(), now.getDate())
-      .toISOString().split('T')[0];
     console.log(`📅 Using default range (${yearRange}yr): ${startDate} to ${endDate}`);
   }
 
+  const chartUrl = buildChart0Url(ticker, startDate, endDate, tradeCount);
+
   const params = new URLSearchParams({
-    'draw': '1',
+    'draw': '2',
     'columns[0][data]': 'FullTimeString24',
     'columns[0][name]': 'FullTimeString24',
     'columns[0][searchable]': 'true',
@@ -631,63 +627,79 @@ async function fetchVlTrades(ticker, tradeCount = 10, visibleRange = null) {
     'columns[4][search][value]': '',
     'columns[4][search][regex]': 'false',
     'columns[5][data]': 'TradeRank',
-    'columns[5][name]': 'Rank',
+    'columns[5][name]': 'R',
     'columns[5][searchable]': 'true',
     'columns[5][orderable]': 'false',
     'columns[5][search][value]': '',
     'columns[5][search][regex]': 'false',
     'columns[6][data]': 'LastComparibleTradeDate',
-    'columns[6][name]': 'Last Date',
+    'columns[6][name]': 'Last Comp',
     'columns[6][searchable]': 'true',
     'columns[6][orderable]': 'false',
     'columns[6][search][value]': '',
     'columns[6][search][regex]': 'false',
-    'order[0][column]': '0',
-    'order[0][dir]': 'DESC',
     'start': '0',
     'length': String(tradeCount),
     'search[value]': '',
     'search[regex]': 'false',
-    'Tickers': ticker,
-    'StartDate': startDate,
-    'EndDate': endDate,
+    'StartDateKey': dateKey(startDate),
+    'EndDateKey': dateKey(endDate),
+    'Ticker': ticker,
+    'VolumeProfile': '0',
+    'Levels': String(tradeCount),
     'MinVolume': '0',
     'MaxVolume': '2000000000',
-    'MinPrice': '0',
-    'MaxPrice': '100000',
     'MinDollars': '500000',
-    'MaxDollars': '300000000000',
-    'Conditions': '-1',
-    'VCD': '0',
-    'RelativeSize': '0',
+    'MaxDollars': '30000000000',
     'DarkPools': '-1',
     'Sweeps': '-1',
     'LatePrints': '-1',
-    'SignaturePrints': '0',
+    'SignaturePrints': '-1',
+    'TradeCount': String(tradeCount),
+    'MinPrice': '0',
+    'MaxPrice': '100000',
+    'VCD': '0',
     'TradeRank': '-1',
+    'TradeRankSnapshot': '-1',
     'IncludePremarket': '1',
     'IncludeRTH': '1',
     'IncludeAH': '1',
     'IncludeOpening': '1',
     'IncludeClosing': '1',
     'IncludePhantom': '1',
-    'IncludeOffsetting': '1',
-    'SectorIndustry': '',
-    'Sort': 'Dollars'
+    'IncludeOffsetting': '1'
   });
 
+  console.log('📤 VL Trades request:', {
+    ticker,
+    startDate,
+    endDate,
+    tradeCount,
+    requestUrl: 'https://www.volumeleaders.com/Chart0/GetTrades',
+    referer: chartUrl,
+    bodyLength: params.toString().length
+  });
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), VL_TRADES_TIMEOUT_MS);
+
   try {
-    const response = await fetch('https://www.volumeleaders.com/Trades/GetTrades', {
+    const response = await fetch('https://www.volumeleaders.com/Chart0/GetTrades', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Accept': 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'Accept': 'application/json, text/javascript, */*; q=0.01',
+        'Origin': 'https://www.volumeleaders.com',
+        'Referer': chartUrl,
         'X-XSRF-TOKEN': token,
         'X-Requested-With': 'XMLHttpRequest'
       },
       credentials: 'include',
+      referrer: chartUrl,
+      signal: controller.signal,
       body: params.toString()
     });
+    clearTimeout(timeoutId);
 
     console.log(`📡 VL Trades API response status: ${response.status}`);
 
@@ -727,8 +739,10 @@ async function fetchVlTrades(ticker, tradeCount = 10, visibleRange = null) {
         timestamp, // Unix seconds for TradingView
         rank: item.TradeRank,
         dollars: item.Dollars,
+        dollarVolume: item.Dollars,
         volume: item.Volume,
-        darkPool: item.DarkPool === 1,
+        darkPool: isVlFlagEnabled(item.DarkPool),
+        sweep: isVlFlagEnabled(item.Sweep),
         fullDateTime: item.FullDateTime,
         source: `trades-fetch:${ticker}`
       };
@@ -744,12 +758,79 @@ async function fetchVlTrades(ticker, tradeCount = 10, visibleRange = null) {
     };
 
   } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      const timeoutSeconds = VL_TRADES_TIMEOUT_MS / 1000;
+      console.error(`❌ VL Trades API timed out after ${timeoutSeconds} seconds`);
+      throw new Error(`VolumeLeaders trades request timed out after ${timeoutSeconds} seconds`);
+    }
+
     console.error(`❌ Failed to fetch VL trades for ${ticker}:`, err);
     throw err;
   }
 }
 
-async function fetchAndDrawTrades(symbol, tabId = null, tradeCount = 5) {
+function isVlFlagEnabled(value) {
+  return value === 1 || value === true || value === '1' || value === 'true' || value === 'True';
+}
+
+function getTradeDateRange(visibleRange = null, yearRange = 5, now = new Date()) {
+  const today = now.toISOString().split('T')[0];
+
+  if (visibleRange && visibleRange.from && visibleRange.to) {
+    const startDate = new Date(visibleRange.from * 1000).toISOString().split('T')[0];
+    const visibleEndDate = new Date(visibleRange.to * 1000).toISOString().split('T')[0];
+
+    return {
+      startDate,
+      endDate: visibleEndDate > today ? today : visibleEndDate
+    };
+  }
+
+  const startDate = new Date(now.getFullYear() - yearRange, now.getMonth(), now.getDate())
+    .toISOString().split('T')[0];
+
+  return { startDate, endDate: today };
+}
+
+function dateKey(dateString) {
+  return dateString.replaceAll('-', '');
+}
+
+function buildChart0Url(ticker, startDate, endDate, levels, tradeCount = levels) {
+  const query = new URLSearchParams({
+    'StartDate': startDate,
+    'EndDate': endDate,
+    'Ticker': ticker,
+    'MinVolume': '0',
+    'MaxVolume': '2000000000',
+    'MinDollars': '500000',
+    'MaxDollars': '30000000000',
+    'MinPrice': '0',
+    'MaxPrice': '100000',
+    'DarkPools': '-1',
+    'Sweeps': '-1',
+    'LatePrints': '-1',
+    'SignaturePrints': '-1',
+    'VolumeProfile': '0',
+    'Levels': String(levels),
+    'TradeCount': String(tradeCount),
+    'VCD': '0',
+    'TradeRank': '-1',
+    'TradeRankSnapshot': '-1',
+    'IncludePremarket': '1',
+    'IncludeRTH': '1',
+    'IncludeAH': '1',
+    'IncludeOpening': '1',
+    'IncludeClosing': '1',
+    'IncludePhantom': '1',
+    'IncludeOffsetting': '1'
+  });
+
+  return `https://www.volumeleaders.com/Chart0?${query.toString()}`;
+}
+
+async function fetchAndDrawTrades(symbol, tabId = null, tradeCount = 5, drawOptions = {}) {
   let visibleRange = null;
 
   if (tabId) {
@@ -764,7 +845,7 @@ async function fetchAndDrawTrades(symbol, tabId = null, tradeCount = 5) {
     }
   }
 
-  const fetchResult = await fetchVlTrades(symbol, tradeCount, visibleRange);
+  const fetchResult = await fetchVlTrades(symbol, tradeCount);
 
   if (!fetchResult.success || fetchResult.trades.length === 0) {
     return fetchResult;
@@ -776,7 +857,8 @@ async function fetchAndDrawTrades(symbol, tabId = null, tradeCount = 5) {
 
       const drawResponse = await browser.tabs.sendMessage(tabId, {
         type: 'DRAW_NOTES',
-        trades: fetchResult.trades
+        trades: fetchResult.trades,
+        options: drawOptions || {}
       });
 
       console.log(`📝 BACKGROUND: Note draw complete:`, drawResponse);

@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+inheritance: true
+
+reviews:
+  path_instructions:
+    - path: "firefox/background.js"
+      instructions: "Review webRequest interception, cookie access, message routing, and browser.storage.local caching carefully. Flag permission creep, broad URL filters, accidental logging of VolumeLeaders data, and cache writes that can corrupt per-ticker levels."
+    - path: "firefox/content-script.js"
+      instructions: "Review the extension-to-page bridge carefully. Content scripts cannot access page globals directly, so injected script loading and window.postMessage handling must preserve the WebExtension security boundary and validate message shape/source before acting."
+    - path: "firefox/injected.js"
+      instructions: "This runs in the TradingView page context and may access TradingViewApi directly. Flag uses of extension-only APIs, missing defensive checks around undocumented TradingView APIs, shape lifecycle leaks, and assumptions that would break when TradingView changes internal objects."
+    - path: "firefox/manifest.json"
+      instructions: "Review permissions, host permissions, content script matches, and version changes closely. Keep access scoped to VolumeLeaders and TradingView unless a change explains why broader access is necessary."
+    - path: "firefox/popup/**"
+      instructions: "Review browser.runtime messaging and storage interactions for stale UI state, missing error handling, and mismatches with background.js message contracts."
+    - path: "firefox/ticker-map.js"
+      instructions: "Review symbol normalization changes for deterministic behavior across VolumeLeaders and TradingView symbols. Flag mappings that introduce ambiguous tickers or case-sensitive regressions."
+    - path: "package.json"
+      instructions: "Review release, build, lint, and signing script changes. Version changes should stay aligned with firefox/manifest.json and releases should continue to use release-it rather than manual tags or version commits."

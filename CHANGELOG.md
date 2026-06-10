@@ -3,6 +3,13 @@
 All notable changes to VL-TV Bridge.
 
 
+## [1.8.1](///compare/v1.8.0...v1.8.1) (2026-06-10)
+
+### Bug Fixes
+
+* let release workflow manage assets f0366c7
+* use visible range for trade fetches 60546a9
+
 ## [1.8.0](///compare/v1.7.0...v1.8.0) (2026-06-09)
 
 ### Features

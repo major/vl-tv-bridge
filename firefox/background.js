@@ -845,7 +845,7 @@ async function fetchAndDrawTrades(symbol, tabId = null, tradeCount = 5, drawOpti
     }
   }
 
-  const fetchResult = await fetchVlTrades(symbol, tradeCount);
+  const fetchResult = await fetchVlTrades(symbol, tradeCount, visibleRange);
 
   if (!fetchResult.success || fetchResult.trades.length === 0) {
     return fetchResult;

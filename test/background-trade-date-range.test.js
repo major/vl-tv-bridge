@@ -6,6 +6,7 @@ const vm = require('node:vm');
 
 function loadBackground(settings = {}) {
   const fetchCalls = [];
+  const tabMessages = [];
   const context = vm.createContext({
     AbortController,
     URLSearchParams,
@@ -53,7 +54,15 @@ function loadBackground(settings = {}) {
       cookies: { getAll: async () => [{ name: '.ASPXAUTH' }] },
       runtime: { onMessage: { addListener() {} } },
       storage: { local: { get: async () => settings } },
-      tabs: { sendMessage: async () => ({}) },
+      tabs: {
+        sendMessage: async (tabId, message) => {
+          tabMessages.push({ tabId, message });
+          if (message?.type === 'GET_VISIBLE_RANGE') {
+            return { range: settings.visibleRange || null };
+          }
+          return {};
+        }
+      },
       webRequest: {
         filterResponseData: () => ({}),
         onBeforeRequest: { addListener() {} },
@@ -66,6 +75,7 @@ function loadBackground(settings = {}) {
   const script = fs.readFileSync(path.join(__dirname, '..', 'firefox', 'background.js'), 'utf8');
   vm.runInContext(script, context);
   context.fetchCalls = fetchCalls;
+  context.tabMessages = tabMessages;
   return context;
 }
 
@@ -187,6 +197,28 @@ test('trade request matches the VolumeLeaders Chart0 GetTrades HAR shape', async
   assert.equal(tradeRequest.options.headers.Origin, 'https://www.volumeleaders.com');
   assert.equal(tradeRequest.options.headers.Referer, 'https://www.volumeleaders.com/Chart0?StartDate=2025-06-08&EndDate=2026-06-08&Ticker=CRDU&MinVolume=0&MaxVolume=2000000000&MinDollars=500000&MaxDollars=30000000000&MinPrice=0&MaxPrice=100000&DarkPools=-1&Sweeps=-1&LatePrints=-1&SignaturePrints=-1&VolumeProfile=0&Levels=5&TradeCount=5&VCD=0&TradeRank=-1&TradeRankSnapshot=-1&IncludePremarket=1&IncludeRTH=1&IncludeAH=1&IncludeOpening=1&IncludeClosing=1&IncludePhantom=1&IncludeOffsetting=1');
   assert.deepEqual(body, expectedBody);
+});
+
+test('fetch and draw trades requests the current chart visible range', async () => {
+  const visibleRange = {
+    from: Date.parse('2026-03-10T00:00:00Z') / 1000,
+    to: Date.parse('2026-06-08T00:00:00Z') / 1000
+  };
+  const context = loadBackground({ yearRange: 5, visibleRange });
+
+  await context.fetchAndDrawTrades('CRDU', 123, 10);
+
+  const tradeRequest = context.fetchCalls.find(call => String(call.url).endsWith('/Chart0/GetTrades'));
+  const body = Object.fromEntries(new URLSearchParams(tradeRequest.options.body));
+
+  assert.deepEqual(plain(context.tabMessages[0]), {
+    tabId: 123,
+    message: { type: 'GET_VISIBLE_RANGE' }
+  });
+  assert.equal(body.StartDateKey, '20260310');
+  assert.equal(body.EndDateKey, '20260608');
+  assert.equal(body.TradeCount, '10');
+  assert.equal(tradeRequest.options.headers.Referer, 'https://www.volumeleaders.com/Chart0?StartDate=2026-03-10&EndDate=2026-06-08&Ticker=CRDU&MinVolume=0&MaxVolume=2000000000&MinDollars=500000&MaxDollars=30000000000&MinPrice=0&MaxPrice=100000&DarkPools=-1&Sweeps=-1&LatePrints=-1&SignaturePrints=-1&VolumeProfile=0&Levels=10&TradeCount=10&VCD=0&TradeRank=-1&TradeRankSnapshot=-1&IncludePremarket=1&IncludeRTH=1&IncludeAH=1&IncludeOpening=1&IncludeClosing=1&IncludePhantom=1&IncludeOffsetting=1');
 });
 
 test('trade response maps sweep flag for trade ray labels', async () => {

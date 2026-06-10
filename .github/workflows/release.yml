@@ -58,19 +58,7 @@ jobs:
           files: |
             build/vl-tv-bridge-${{ steps.get_version.outputs.VERSION }}-signed.xpi
             build/vl-tv-bridge-${{ steps.get_version.outputs.VERSION }}.zip
-          body: |
-            ## VL TradingView Bridge v${{ steps.get_version.outputs.VERSION }}
-
-            ### Installation
-            - **Firefox (Signed)**: Download the `-signed.xpi` file - this is signed by Mozilla and will install without warnings
-            - **Source Code**: Download the `.zip` for review or manual installation
-
-            ### Files
-            - `vl-tv-bridge-${{ steps.get_version.outputs.VERSION }}-signed.xpi` - Mozilla-signed extension (recommended)
-            - `vl-tv-bridge-${{ steps.get_version.outputs.VERSION }}.zip` - Source code
-
-            ### Changes
-            See commit history for details.
+          generate_release_notes: true
           draft: false
           prerelease: false
         env:

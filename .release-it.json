@@ -7,9 +7,7 @@
     "requireCleanWorkingDir": true
   },
   "github": {
-    "release": true,
-    "releaseName": "v${version}",
-    "autoGenerate": true
+    "release": false
   },
   "hooks": {
     "before:init": ["npm run lint"],

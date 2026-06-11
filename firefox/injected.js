@@ -303,6 +303,12 @@
     }
 
     const { price, timestamp, rank, darkPool, sweep, dollarVolume, options = {} } = data;
+    const validRank = Number.isInteger(rank) && rank >= 1 && rank <= 100;
+
+    if (!validRank) {
+      console.log(`📍 Trade #${rank} has invalid rank, skipping`);
+      return { skipped: true, price, timestamp, rank, reason: 'invalid_rank' };
+    }
 
     const visibleRange = getVisibleTimeRange();
     if (visibleRange) {

@@ -42,7 +42,7 @@ function loadInjected(chart) {
         }
       };
       await Promise.all(listeners.message.map(handler => handler(event)));
-      return postedMessages.find(message => message.messageId === command);
+      return postedMessages.findLast(message => message.messageId === command);
     }
   };
 }
@@ -136,6 +136,43 @@ test('DRAW_NOTE uses sweep marker and custom trade ray styling', async () => {
   assert.equal(createShapeCalls[1].config.text, '● VL #3 $1M');
   assert.equal(createShapeCalls[1].config.overrides.linecolor, '#445566');
   assert.equal(createShapeCalls[1].config.overrides.linewidth, 4);
+});
+
+test('DRAW_NOTE only creates shapes for ranks from 1 through 100', async () => {
+  const createShapeCalls = [];
+  const chart = {
+    createShape(point, config) {
+      createShapeCalls.push({ point, config });
+      return `ray-${createShapeCalls.length}`;
+    },
+    getVisibleRange() {
+      return { from: 1700000000, to: 1800000000 };
+    }
+  };
+  const injected = loadInjected(chart);
+
+  const responses = [];
+  for (const rank of [0, 1, 100, 101, undefined, '2']) {
+    responses.push(await injected.send('DRAW_NOTE', {
+      price: 6.22,
+      timestamp: 1712345678,
+      rank,
+      dollarVolume: 58998410
+    }));
+  }
+
+  assert.deepEqual(createShapeCalls.map(call => call.config.text), [
+    '● VL #1 $59M',
+    '● VL #100 $59M'
+  ]);
+  assert.deepEqual(responses.map(response => plain(response.result)), [
+    { skipped: true, price: 6.22, timestamp: 1712345678, rank: 0, reason: 'invalid_rank' },
+    { shapeId: 'ray-1', price: 6.22, timestamp: 1712345678, rank: 1 },
+    { shapeId: 'ray-2', price: 6.22, timestamp: 1712345678, rank: 100 },
+    { skipped: true, price: 6.22, timestamp: 1712345678, rank: 101, reason: 'invalid_rank' },
+    { skipped: true, price: 6.22, timestamp: 1712345678, reason: 'invalid_rank' },
+    { skipped: true, price: 6.22, timestamp: 1712345678, rank: '2', reason: 'invalid_rank' }
+  ]);
 });
 
 test('CLEAR_VL_NOTES removes existing VL horizontal rays and legacy notes', async () => {

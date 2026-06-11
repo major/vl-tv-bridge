@@ -3,6 +3,12 @@
 All notable changes to VL-TV Bridge.
 
 
+## [1.8.3](///compare/v1.8.2...v1.8.3) (2026-06-11)
+
+### Bug Fixes
+
+* parse VL trade times as market time 5cb880a
+
 ## [1.8.2](///compare/v1.8.1...v1.8.2) (2026-06-11)
 
 ### Bug Fixes

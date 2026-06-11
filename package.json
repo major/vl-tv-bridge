@@ -1,6 +1,6 @@
 {
   "name": "vl-tv-bridge",
-  "version": "1.8.1",
+  "version": "1.8.2",
   "description": "Draw VolumeLeaders trade levels on TradingView charts",
   "scripts": {
     "test": "node --test",

@@ -3,6 +3,13 @@
 All notable changes to VL-TV Bridge.
 
 
+## [1.8.2](///compare/v1.8.1...v1.8.2) (2026-06-11)
+
+### Bug Fixes
+
+* hide invalid trade ranks 9cef429
+* let workflow publish GitHub releases 2818d29
+
 ## [1.8.1](///compare/v1.8.0...v1.8.1) (2026-06-10)
 
 ### Bug Fixes

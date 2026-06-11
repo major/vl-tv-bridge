@@ -254,6 +254,28 @@ test('trade response maps sweep flag for trade ray labels', async () => {
   assert.equal(result.trades[1].sweep, true);
 });
 
+test('trade response treats FullDateTime as New York market time', async () => {
+  const context = loadBackground({
+    yearRange: 1,
+    tradesData: [{
+      Date: '/Date(1780358400000)/',
+      Ticker: 'BE',
+      Price: 302.85,
+      TradeRank: 4,
+      Dollars: 434165760,
+      Volume: 1433552,
+      DarkPool: 1,
+      Sweep: 0,
+      FullDateTime: '2026-06-02T16:06:57'
+    }]
+  });
+
+  const result = await context.fetchVlTrades('BE', 5, null, new Date('2026-06-11T16:37:00Z'));
+
+  assert.equal(result.trades[0].timestamp, Date.parse('2026-06-02T20:06:57Z') / 1000);
+  assert.equal(result.trades[0].darkPool, true);
+});
+
 test('level request matches the VolumeLeaders Chart0 GetTradeLevels HAR shape', async () => {
   const context = loadBackground({ yearRange: 1, levelCount: 5, tradeCount: 3 });
 

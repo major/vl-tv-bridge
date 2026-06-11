@@ -14,10 +14,59 @@ const VL_API_PATTERNS = [
 ];
 
 const VL_TRADES_TIMEOUT_MS = 60000;
+const VL_MARKET_TIME_ZONE = 'America/New_York';
 
 let debugMode = true;
 let xsrfToken = null;
 let xsrfTokenExpiry = 0;
+
+function getTimeZoneOffsetMs(timestampMs, timeZone) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hour12: false,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  }).formatToParts(new Date(timestampMs));
+
+  const values = Object.fromEntries(
+    parts
+      .filter(part => part.type !== 'literal')
+      .map(part => [part.type, Number(part.value)])
+  );
+
+  const zonedTimestampMs = Date.UTC(
+    values.year,
+    values.month - 1,
+    values.day,
+    values.hour,
+    values.minute,
+    values.second
+  );
+
+  return zonedTimestampMs - timestampMs;
+}
+
+function parseVlFullDateTime(fullDateTime) {
+  if (!fullDateTime) return null;
+
+  const match = fullDateTime.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/);
+  if (!match) return null;
+
+  const [, year, month, day, hour, minute, second] = match.map(Number);
+  const localTimestampMs = Date.UTC(year, month - 1, day, hour, minute, second);
+
+  let timestampMs = localTimestampMs;
+  for (let i = 0; i < 2; i += 1) {
+    timestampMs = localTimestampMs - getTimeZoneOffsetMs(timestampMs, VL_MARKET_TIME_ZONE);
+  }
+
+  return timestampMs / 1000;
+}
 
 /**
  * Initialize extension
@@ -730,8 +779,11 @@ async function fetchVlTrades(ticker, tradeCount = 10, visibleRange = null, now =
     // Parse and store the trades
     const trades = json.data.map(item => {
       // Parse .NET JSON date format: "/Date(1748563200000)/"
+      const fullDateTimestamp = parseVlFullDateTime(item.FullDateTime);
       const dateMatch = item.Date?.match(/\/Date\((\d+)\)\//);
-      const timestamp = dateMatch ? parseInt(dateMatch[1], 10) / 1000 : null;
+      const timestamp = Number.isFinite(fullDateTimestamp)
+        ? fullDateTimestamp
+        : (dateMatch ? parseInt(dateMatch[1], 10) / 1000 : null);
 
       return {
         ticker: item.Ticker || ticker,

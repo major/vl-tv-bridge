@@ -165,6 +165,46 @@ test('DRAW_NOTE can include original trade rank in label', async () => {
   assert.equal(createShapeCalls[0].config.text, '● VL #10 (#5) $85M');
 });
 
+test('DRAW_NOTE omits original trade rank unless enabled with an integer rank', async () => {
+  const createShapeCalls = [];
+  const chart = {
+    createShape(point, config) {
+      createShapeCalls.push({ point, config });
+      return `ray-${createShapeCalls.length}`;
+    },
+    getVisibleRange() {
+      return { from: 1700000000, to: 1800000000 };
+    }
+  };
+  const injected = loadInjected(chart);
+
+  const cases = [
+    { originalRank: 5, options: { showOriginalTradeRank: false } },
+    { options: { showOriginalTradeRank: true } },
+    { originalRank: '5', options: { showOriginalTradeRank: true } },
+    { originalRank: 5.5, options: { showOriginalTradeRank: true } },
+    { originalRank: null, options: { showOriginalTradeRank: true } }
+  ];
+
+  for (const testCase of cases) {
+    await injected.send('DRAW_NOTE', {
+      price: 123.45,
+      timestamp: 1712345678,
+      rank: 10,
+      dollarVolume: 85000000,
+      ...testCase
+    });
+  }
+
+  assert.deepEqual(createShapeCalls.map(call => call.config.text), [
+    '● VL #10 $85M',
+    '● VL #10 $85M',
+    '● VL #10 $85M',
+    '● VL #10 $85M',
+    '● VL #10 $85M'
+  ]);
+});
+
 test('DRAW_NOTE only creates shapes for ranks from 1 through 100', async () => {
   const createShapeCalls = [];
   const chart = {

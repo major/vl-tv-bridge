@@ -254,6 +254,29 @@ test('trade response maps sweep flag for trade ray labels', async () => {
   assert.equal(result.trades[1].sweep, true);
 });
 
+test('trade response maps TradeRankSnapshot to originalRank', async () => {
+  const context = loadBackground({
+    yearRange: 1,
+    tradesData: [{
+      Date: '/Date(1779148800000)/',
+      Ticker: 'CRDU',
+      Price: 36.8,
+      TradeRank: 10,
+      TradeRankSnapshot: 5,
+      Dollars: 85000000,
+      Volume: 39671,
+      DarkPool: 0,
+      Sweep: 0,
+      FullDateTime: '2026-05-19T09:36:02'
+    }]
+  });
+
+  const result = await context.fetchVlTrades('CRDU', 5, null, new Date('2026-06-08T12:00:00Z'));
+
+  assert.equal(result.trades[0].rank, 10);
+  assert.equal(result.trades[0].originalRank, 5);
+});
+
 test('trade response treats FullDateTime as New York market time', async () => {
   const context = loadBackground({
     yearRange: 1,

@@ -254,6 +254,7 @@ if (window !== window.top) {
           price: trade.price,
           timestamp: trade.timestamp,
           rank: trade.rank,
+          originalRank: trade.originalRank,
           darkPool: trade.darkPool,
           sweep: trade.sweep,
           dollarVolume: trade.dollarVolume ?? trade.dollars,

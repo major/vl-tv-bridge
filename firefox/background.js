@@ -790,6 +790,7 @@ async function fetchVlTrades(ticker, tradeCount = 10, visibleRange = null, now =
         price: item.Price,
         timestamp, // Unix seconds for TradingView
         rank: item.TradeRank,
+        originalRank: item.TradeRankSnapshot,
         dollars: item.Dollars,
         dollarVolume: item.Dollars,
         volume: item.Volume,

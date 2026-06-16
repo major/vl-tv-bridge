@@ -302,7 +302,7 @@
       throw new Error(error);
     }
 
-    const { price, timestamp, rank, darkPool, sweep, dollarVolume, options = {} } = data;
+    const { price, timestamp, rank, originalRank, darkPool, sweep, dollarVolume, options = {} } = data;
     const validRank = Number.isInteger(rank) && rank >= 1 && rank <= 100;
 
     if (!validRank) {
@@ -332,7 +332,10 @@
     }
 
     const marker = sweep ? '◆' : '●';
-    const labelText = `${marker} VL #${rank}${volLabel}`;
+    const originalRankLabel = options.showOriginalTradeRank && Number.isInteger(originalRank)
+      ? ` (#${originalRank})`
+      : '';
+    const labelText = `${marker} VL #${rank}${originalRankLabel}${volLabel}`;
 
     const overrides = {
       linecolor: color,

@@ -138,6 +138,33 @@ test('DRAW_NOTE uses sweep marker and custom trade ray styling', async () => {
   assert.equal(createShapeCalls[1].config.overrides.linewidth, 4);
 });
 
+test('DRAW_NOTE can include original trade rank in label', async () => {
+  const createShapeCalls = [];
+  const chart = {
+    createShape(point, config) {
+      createShapeCalls.push({ point, config });
+      return 'ray-1';
+    },
+    getVisibleRange() {
+      return { from: 1700000000, to: 1800000000 };
+    }
+  };
+  const injected = loadInjected(chart);
+
+  await injected.send('DRAW_NOTE', {
+    price: 123.45,
+    timestamp: 1712345678,
+    rank: 10,
+    originalRank: 5,
+    dollarVolume: 85000000,
+    options: {
+      showOriginalTradeRank: true
+    }
+  });
+
+  assert.equal(createShapeCalls[0].config.text, '● VL #10 (#5) $85M');
+});
+
 test('DRAW_NOTE only creates shapes for ranks from 1 through 100', async () => {
   const createShapeCalls = [];
   const chart = {

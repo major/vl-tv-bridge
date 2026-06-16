@@ -59,6 +59,7 @@ const elements = {
   tradeLitColorInput: document.getElementById('trade-lit-color-input'),
   tradeDarkPoolColorInput: document.getElementById('trade-dark-pool-color-input'),
   tradeThicknessSelect: document.getElementById('trade-thickness-select'),
+  showOriginalTradeRankToggle: document.getElementById('show-original-trade-rank-toggle'),
   yearRangeSelect: document.getElementById('year-range-select'),
   clusteringToggle: document.getElementById('clustering-toggle'),
   thresholdSelect: document.getElementById('threshold-select'),
@@ -98,7 +99,8 @@ async function init() {
   // Load settings
   const stored = await browser.storage.local.get([
     'debugMode', 'levelCount', 'tradeCount', 'yearRange', 'clusteringEnabled', 'clusterThreshold',
-    'lineColor', 'lineThickness', 'showDates', 'tradeLitColor', 'tradeDarkPoolColor', 'tradeThickness'
+    'lineColor', 'lineThickness', 'showDates', 'tradeLitColor', 'tradeDarkPoolColor', 'tradeThickness',
+    'showOriginalTradeRank'
   ]);
   elements.debugToggle.checked = stored.debugMode || false;
   elements.levelCountSelect.value = stored.levelCount ?? 10;
@@ -106,6 +108,7 @@ async function init() {
   elements.tradeLitColorInput.value = stored.tradeLitColor ?? '#2962FF';
   elements.tradeDarkPoolColorInput.value = stored.tradeDarkPoolColor ?? '#FF9800';
   elements.tradeThicknessSelect.value = stored.tradeThickness ?? 2;
+  elements.showOriginalTradeRankToggle.checked = stored.showOriginalTradeRank || false;
   elements.yearRangeSelect.value = stored.yearRange ?? 5;
   elements.clusteringToggle.checked = stored.clusteringEnabled !== false; // Default true
   elements.thresholdSelect.value = stored.clusterThreshold ?? 1.0;
@@ -296,6 +299,7 @@ async function fetchAndDrawTrades() {
     const tradeLitColor = normalizeColorForDraw(elements.tradeLitColorInput?.value, '#2962FF');
     const tradeDarkPoolColor = normalizeColorForDraw(elements.tradeDarkPoolColorInput?.value, '#FF9800');
     const tradeThickness = parseInt(elements.tradeThicknessSelect?.value, 10) || 2;
+    const showOriginalTradeRank = elements.showOriginalTradeRankToggle?.checked || false;
 
     // Send fetch request with tabId - background script handles drawing
     const response = await browser.runtime.sendMessage({
@@ -306,7 +310,8 @@ async function fetchAndDrawTrades() {
       drawOptions: {
         tradeLitColor,
         tradeDarkPoolColor,
-        tradeThickness
+        tradeThickness,
+        showOriginalTradeRank
       }
     });
 
@@ -435,6 +440,12 @@ async function handleTradeThicknessChange() {
   console.log('⚙️ Trade thickness set to:', thickness);
 }
 
+async function handleShowOriginalTradeRankToggle() {
+  const enabled = elements.showOriginalTradeRankToggle.checked;
+  await browser.storage.local.set({ showOriginalTradeRank: enabled });
+  console.log('⚙️ Show original trade rank enabled:', enabled);
+}
+
 /**
  * Handle year range selection change
  */
@@ -534,6 +545,7 @@ function setupEventListeners() {
   elements.tradeLitColorInput.addEventListener('input', handleTradeLitColorChange);
   elements.tradeDarkPoolColorInput.addEventListener('input', handleTradeDarkPoolColorChange);
   elements.tradeThicknessSelect.addEventListener('change', handleTradeThicknessChange);
+  elements.showOriginalTradeRankToggle.addEventListener('change', handleShowOriginalTradeRankToggle);
 
   // Tab switching
   document.querySelectorAll('.tab').forEach(tab => {

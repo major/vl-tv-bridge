@@ -1,75 +1,36 @@
 # AGENTS.md
 
-This file provides guidance to coding agents working in this repository.
+Firefox WebExtension bridging VolumeLeaders trade levels into TradingView chart lines.
 
-## Project Overview
+## Commands
 
-Firefox WebExtension that bridges VolumeLeaders and TradingView. It intercepts VL API calls to extract institutional trade levels and draws them as horizontal lines on TradingView charts using TradingView's undocumented `createShape()` API.
-
-## Development Commands
-
-```bash
-npm run start         # Run in Firefox with hot-reload (via web-ext)
-npm run lint          # Lint extension with web-ext
-npm run build         # Build unsigned ZIP/XPI
-npm run build:signed  # Build and sign with Mozilla
-```
+- `npm test` - run tests
+- `npm run lint` - web-ext lint
+- `npm run build` - unsigned ZIP/XPI
+- `npm run start` - run in Firefox with hot reload
 
 ## Releases
 
-Use `release-it` for all releases - never create version commits or tags manually.
+Use `release-it`; never create version commits or tags manually.
 
-```bash
-npm run release -- patch --ci  # patch release, non-interactive
-npm run release:minor -- --ci  # minor release
-npm run release:major -- --ci  # major release
-npm run release:dry -- patch --ci  # dry run to preview, non-interactive
-```
+- Patch: `npm run release -- patch --ci`
+- Minor: `npm run release:minor -- --ci`
+- Major: `npm run release:major -- --ci`
+- Dry run: `npm run release:dry -- patch --ci`
 
-Release flow:
+Release-it bumps `package.json`, `package-lock.json`, and `firefox/manifest.json`, updates `CHANGELOG.md`, commits, tags, and pushes.
 
-1. Start from clean `main` synced with `origin/main`.
-2. Use `--ci` so release-it does not stop on interactive prompts.
-3. Run the release-it command above.
-4. `release-it` runs lint, bumps `package.json` + `package-lock.json` + `firefox/manifest.json`, updates `CHANGELOG.md`, commits, tags, and pushes.
-5. The pushed `v*` tag triggers `.github/workflows/release.yml`, which builds/signs the extension and creates the GitHub release with assets.
+A pushed `v*` tag triggers `.github/workflows/release.yml` to build/sign assets and create the GitHub release. Do not wait on that workflow unless the user asks; report the Actions URL.
 
-Do not wait on the release workflow unless the user explicitly asks; reporting the Actions run URL is enough.
+## Progressive discovery
 
-## Architecture
+Start with these files depending on task:
 
-Multi-layer context-bridging design to work around Firefox's WebExtension security boundaries:
+- Extension metadata/permissions: `firefox/manifest.json`
+- API interception/cache/auth: `firefox/background.js`
+- TradingView page bridge: `firefox/content-script.js`
+- TradingView shape drawing: `firefox/injected.js`
+- Ticker normalization: `firefox/ticker-map.js`
+- Popup UI: `firefox/popup/`
 
-```
-Popup UI (popup/)
-    ↓ browser.runtime.sendMessage
-Background Script (background.js)
-    - Intercepts VolumeLeaders API via webRequest
-    - Manages browser.storage.local caching
-    - Checks VL authentication via cookies
-    ↓ browser.tabs.sendMessage
-Content Script (content-script.js)
-    - Injected on tradingview.com
-    - Bridges extension ↔ page communication
-    - Detects current chart symbol
-    ↓ window.postMessage
-Injected Script (injected.js)
-    - Runs in page context (not extension context)
-    - Direct access to TradingViewApi global
-    - Draws horizontal lines via chart.createShape()
-```
-
-**Why this layering?** Content scripts cannot access page JavaScript objects. The injected script runs in page context to access TradingView's API, communicating back via `window.postMessage`.
-
-## Key Files
-
-- `firefox/manifest.json` - Manifest v2, defines permissions and scripts
-- `firefox/background.js` - API interception, caching, message routing
-- `firefox/content-script.js` - TradingView integration, script injection
-- `firefox/injected.js` - Shape drawing using TradingView's internal API
-- `firefox/ticker-map.js` - Symbol normalization utilities
-- `firefox/popup/` - Extension popup UI (settings, actions)
-
-## Storage Schema
-
-Trade levels cached in `browser.storage.local` under `levels` key, keyed by ticker symbol. Each level contains: price, dollars, volume, trades, rank, dates, timestamp, source.
+Important boundary: content scripts cannot access page JS objects, so TradingView API calls must happen from `injected.js` via `window.postMessage`.

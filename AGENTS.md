@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to coding agents working in this repository.
 
 ## Project Overview
 
@@ -20,13 +20,21 @@ npm run build:signed  # Build and sign with Mozilla
 Use `release-it` for all releases - never create version commits or tags manually.
 
 ```bash
-npm run release        # patch release
-npm run release:minor  # minor release
-npm run release:major  # major release
-npm run release:dry    # dry run to preview
+npm run release -- patch --ci  # patch release, non-interactive
+npm run release:minor -- --ci  # minor release
+npm run release:major -- --ci  # major release
+npm run release:dry -- patch --ci  # dry run to preview, non-interactive
 ```
 
-This handles: lint, version bumps (package.json + manifest.json), changelog, commit, tag, build, and GitHub release with assets.
+Release flow:
+
+1. Start from clean `main` synced with `origin/main`.
+2. Use `--ci` so release-it does not stop on interactive prompts.
+3. Run the release-it command above.
+4. `release-it` runs lint, bumps `package.json` + `package-lock.json` + `firefox/manifest.json`, updates `CHANGELOG.md`, commits, tags, and pushes.
+5. The pushed `v*` tag triggers `.github/workflows/release.yml`, which builds/signs the extension and creates the GitHub release with assets.
+
+Do not wait on the release workflow unless the user explicitly asks; reporting the Actions run URL is enough.
 
 ## Architecture
 

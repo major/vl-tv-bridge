@@ -3,6 +3,12 @@
 All notable changes to VL-TV Bridge.
 
 
+## [1.8.5](///compare/v1.8.4...v1.8.5) (2026-06-17)
+
+### Bug Fixes
+
+* omit duplicate original trade rank f57ca2a
+
 ## [1.8.4](///compare/v1.8.3...v1.8.4) (2026-06-16)
 
 ### Features

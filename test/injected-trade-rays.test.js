@@ -165,6 +165,33 @@ test('DRAW_NOTE can include original trade rank in label', async () => {
   assert.equal(createShapeCalls[0].config.text, '● VL #10 (#5) $85M');
 });
 
+test('DRAW_NOTE omits original trade rank when it matches current rank', async () => {
+  const createShapeCalls = [];
+  const chart = {
+    createShape(point, config) {
+      createShapeCalls.push({ point, config });
+      return 'ray-1';
+    },
+    getVisibleRange() {
+      return { from: 1700000000, to: 1800000000 };
+    }
+  };
+  const injected = loadInjected(chart);
+
+  await injected.send('DRAW_NOTE', {
+    price: 123.45,
+    timestamp: 1712345678,
+    rank: 2,
+    originalRank: 2,
+    dollarVolume: 85000000,
+    options: {
+      showOriginalTradeRank: true
+    }
+  });
+
+  assert.equal(createShapeCalls[0].config.text, '● VL #2 $85M');
+});
+
 test('DRAW_NOTE omits original trade rank unless enabled with an integer rank', async () => {
   const createShapeCalls = [];
   const chart = {

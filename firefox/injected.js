@@ -332,7 +332,7 @@
     }
 
     const marker = sweep ? '◆' : '●';
-    const originalRankLabel = options.showOriginalTradeRank && Number.isInteger(originalRank)
+    const originalRankLabel = options.showOriginalTradeRank && Number.isInteger(originalRank) && originalRank !== rank
       ? ` (#${originalRank})`
       : '';
     const labelText = `${marker} VL #${rank}${originalRankLabel}${volLabel}`;

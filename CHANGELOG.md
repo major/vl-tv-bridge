@@ -3,6 +3,12 @@
 All notable changes to VL-TV Bridge.
 
 
+## [1.8.6](///compare/v1.8.5...v1.8.6) (2026-06-23)
+
+### Features
+
+* add level line opacity setting 3ef33c3
+
 ## [1.8.5](///compare/v1.8.4...v1.8.5) (2026-06-17)
 
 ### Bug Fixes

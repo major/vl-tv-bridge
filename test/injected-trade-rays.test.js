@@ -51,6 +51,31 @@ function plain(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+test('DRAW_LINE applies configured opacity to level color', async () => {
+  const createShapeCalls = [];
+  const chart = {
+    createShape(point, config) {
+      createShapeCalls.push({ point, config });
+      return 'line-1';
+    }
+  };
+  const injected = loadInjected(chart);
+
+  const response = await injected.send('DRAW_LINE', {
+    price: 123.45,
+    label: 'VL #1',
+    options: {
+      linecolor: '#112233',
+      lineopacity: 50
+    }
+  });
+
+  assert.equal(response.error, null);
+  assert.equal(createShapeCalls.length, 1);
+  assert.equal(createShapeCalls[0].config.overrides.linecolor, 'rgba(17, 34, 51, 0.5)');
+  assert.equal(createShapeCalls[0].config.overrides.textcolor, 'rgba(17, 34, 51, 0.5)');
+});
+
 test('DRAW_NOTE creates a horizontal ray from the actual trade timestamp', async () => {
   const createShapeCalls = [];
   const chart = {

@@ -179,6 +179,7 @@ if (window !== window.top) {
             options: {
               linecolor: options.color || '#02A9DE',
               linewidth: 4, // Thick line for zones
+              lineopacity: options.opacity ?? 100,
               linestyle: options.style || 0
             }
           });
@@ -202,6 +203,7 @@ if (window !== window.top) {
             options: {
               linecolor: options.color || '#02A9DE',
               linewidth: options.width || 2,
+              lineopacity: options.opacity ?? 100,
               linestyle: options.style || 0
             }
           });

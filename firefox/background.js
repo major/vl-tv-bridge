@@ -581,6 +581,7 @@ async function fetchAndDraw(symbol, tabId = null, drawOptions = {}) {
         options: {
           color: drawOptions.color || '#02A9DE',
           width: drawOptions.width || 2,
+          opacity: drawOptions.opacity ?? 100,
           style: drawOptions.style || 0
         }
       });

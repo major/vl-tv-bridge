@@ -139,6 +139,18 @@
     return ticker;
   }
 
+  function applyOpacity(color, opacity = 100) {
+    const value = Number(opacity);
+    const pct = Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 100;
+
+    if (pct >= 100 || !/^#[0-9A-F]{6}$/i.test(color)) {
+      return color;
+    }
+
+    const hex = color.slice(1);
+    return `rgba(${parseInt(hex.slice(0, 2), 16)}, ${parseInt(hex.slice(2, 4), 16)}, ${parseInt(hex.slice(4, 6), 16)}, ${pct / 100})`;
+  }
+
   /**
    * Draw a horizontal line on the chart
    */
@@ -156,14 +168,16 @@
 
     const { price, label, options = {} } = data;
 
+    const linecolor = applyOpacity(options.linecolor || '#02A9DE', options.lineopacity ?? 100);
+
     // Default styling - VL cyan theme
     // Only pass TradingView-compatible properties (no spread to avoid extra props)
     const overrides = {
-      linecolor: options.linecolor || '#02A9DE',
+      linecolor,
       linewidth: options.linewidth || 2,
       linestyle: options.linestyle || 0, // 0=solid, 1=dotted, 2=dashed
       showLabel: true,
-      textcolor: options.textcolor || options.linecolor || '#02A9DE',
+      textcolor: options.textcolor || linecolor,
       fontsize: options.fontsize || 12,
       bold: options.bold !== false,
       horzLabelsAlign: 'right',
@@ -227,14 +241,16 @@
 
     const { highPrice, lowPrice, midPrice, label, options = {} } = data;
 
+    const linecolor = applyOpacity(options.linecolor || '#02A9DE', options.lineopacity ?? 100);
+
     // Use thick line at midpoint to represent the zone
     // Only pass TradingView-compatible properties (no spread to avoid extra props)
     const overrides = {
-      linecolor: options.linecolor || '#02A9DE',
+      linecolor,
       linewidth: options.linewidth || 4, // Thick line for zones (vs 2 for single levels)
       linestyle: options.linestyle || 0, // Solid
       showLabel: true,
-      textcolor: options.textcolor || options.linecolor || '#02A9DE',
+      textcolor: options.textcolor || linecolor,
       fontsize: options.fontsize || 12,
       bold: options.bold !== false,
       horzLabelsAlign: 'right',

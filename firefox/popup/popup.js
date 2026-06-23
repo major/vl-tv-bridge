@@ -66,6 +66,7 @@ const elements = {
   thresholdRow: document.getElementById('threshold-row'),
   lineColorInput: document.getElementById('line-color-input'),
   lineThicknessSelect: document.getElementById('line-thickness-select'),
+  lineOpacitySelect: document.getElementById('line-opacity-select'),
   showDatesToggle: document.getElementById('show-dates-toggle')
 };
 
@@ -99,7 +100,7 @@ async function init() {
   // Load settings
   const stored = await browser.storage.local.get([
     'debugMode', 'levelCount', 'tradeCount', 'yearRange', 'clusteringEnabled', 'clusterThreshold',
-    'lineColor', 'lineThickness', 'showDates', 'tradeLitColor', 'tradeDarkPoolColor', 'tradeThickness',
+    'lineColor', 'lineThickness', 'lineOpacity', 'showDates', 'tradeLitColor', 'tradeDarkPoolColor', 'tradeThickness',
     'showOriginalTradeRank'
   ]);
   elements.debugToggle.checked = stored.debugMode || false;
@@ -114,6 +115,7 @@ async function init() {
   elements.thresholdSelect.value = stored.clusterThreshold ?? 1.0;
   elements.lineColorInput.value = stored.lineColor ?? '#2962FF';
   elements.lineThicknessSelect.value = stored.lineThickness ?? 2;
+  elements.lineOpacitySelect.value = stored.lineOpacity ?? 100;
   elements.showDatesToggle.checked = stored.showDates || false; // Default false
   updateThresholdVisibility();
 
@@ -247,6 +249,7 @@ async function fetchAndDraw() {
       lineColor = '#2962FF';
     }
     const lineThickness = parseInt(elements.lineThicknessSelect?.value, 10) || 2;
+    const lineOpacity = parseInt(elements.lineOpacitySelect?.value, 10) || 100;
 
     const response = await browser.runtime.sendMessage({
       type: 'FETCH_VL_LEVELS',
@@ -255,6 +258,7 @@ async function fetchAndDraw() {
       drawOptions: {
         color: lineColor,
         width: lineThickness,
+        opacity: lineOpacity,
         style: 0
       }
     });
@@ -504,6 +508,12 @@ async function handleLineThicknessChange() {
   console.log('⚙️ Line thickness set to:', thickness);
 }
 
+async function handleLineOpacityChange() {
+  const opacity = parseInt(elements.lineOpacitySelect.value, 10);
+  await browser.storage.local.set({ lineOpacity: opacity });
+  console.log('⚙️ Line opacity set to:', opacity + '%');
+}
+
 /**
  * Handle show dates toggle change
  */
@@ -541,6 +551,7 @@ function setupEventListeners() {
   elements.thresholdSelect.addEventListener('change', handleThresholdChange);
   elements.lineColorInput.addEventListener('input', handleLineColorChange);
   elements.lineThicknessSelect.addEventListener('change', handleLineThicknessChange);
+  elements.lineOpacitySelect.addEventListener('change', handleLineOpacityChange);
   elements.showDatesToggle.addEventListener('change', handleShowDatesToggle);
   elements.tradeLitColorInput.addEventListener('input', handleTradeLitColorChange);
   elements.tradeDarkPoolColorInput.addEventListener('input', handleTradeDarkPoolColorChange);

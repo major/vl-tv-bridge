@@ -644,100 +644,55 @@ async function fetchVlTrades(ticker, tradeCount = 10, visibleRange = null, now =
 
   const chartUrl = buildChart0Url(ticker, startDate, endDate, tradeCount);
 
-  const params = new URLSearchParams({
-    'draw': '2',
-    'columns[0][data]': 'FullTimeString24',
-    'columns[0][name]': 'FullTimeString24',
-    'columns[0][searchable]': 'true',
-    'columns[0][orderable]': 'false',
-    'columns[0][search][value]': '',
-    'columns[0][search][regex]': 'false',
-    'columns[1][data]': 'Volume',
-    'columns[1][name]': 'Sh',
-    'columns[1][searchable]': 'true',
-    'columns[1][orderable]': 'false',
-    'columns[1][search][value]': '',
-    'columns[1][search][regex]': 'false',
-    'columns[2][data]': 'Price',
-    'columns[2][name]': 'Price',
-    'columns[2][searchable]': 'true',
-    'columns[2][orderable]': 'false',
-    'columns[2][search][value]': '',
-    'columns[2][search][regex]': 'false',
-    'columns[3][data]': 'Dollars',
-    'columns[3][name]': '$$',
-    'columns[3][searchable]': 'true',
-    'columns[3][orderable]': 'false',
-    'columns[3][search][value]': '',
-    'columns[3][search][regex]': 'false',
-    'columns[4][data]': 'DollarsMultiplier',
-    'columns[4][name]': 'RS',
-    'columns[4][searchable]': 'true',
-    'columns[4][orderable]': 'false',
-    'columns[4][search][value]': '',
-    'columns[4][search][regex]': 'false',
-    'columns[5][data]': 'TradeRank',
-    'columns[5][name]': 'R',
-    'columns[5][searchable]': 'true',
-    'columns[5][orderable]': 'false',
-    'columns[5][search][value]': '',
-    'columns[5][search][regex]': 'false',
-    'columns[6][data]': 'LastComparibleTradeDate',
-    'columns[6][name]': 'Last Comp',
-    'columns[6][searchable]': 'true',
-    'columns[6][orderable]': 'false',
-    'columns[6][search][value]': '',
-    'columns[6][search][regex]': 'false',
-    'start': '0',
-    'length': String(tradeCount),
-    'search[value]': '',
-    'search[regex]': 'false',
-    'StartDateKey': dateKey(startDate),
-    'EndDateKey': dateKey(endDate),
-    'Ticker': ticker,
-    'VolumeProfile': '0',
-    'Levels': String(tradeCount),
-    'MinVolume': '0',
-    'MaxVolume': '2000000000',
-    'MinDollars': '500000',
-    'MaxDollars': '30000000000',
-    'DarkPools': '-1',
-    'Sweeps': '-1',
-    'LatePrints': '-1',
-    'SignaturePrints': '-1',
-    'TradeCount': String(tradeCount),
-    'MinPrice': '0',
-    'MaxPrice': '100000',
-    'VCD': '0',
-    'TradeRank': '-1',
-    'TradeRankSnapshot': '-1',
-    'IncludePremarket': '1',
-    'IncludeRTH': '1',
-    'IncludeAH': '1',
-    'IncludeOpening': '1',
-    'IncludeClosing': '1',
-    'IncludePhantom': '1',
-    'IncludeOffsetting': '1'
-  });
+  // ponytail: use GetAllPriceVolumeTradeData instead of GetTrades —
+  // GetTrades returns wrong DarkPool flags on wide date ranges,
+  // GetAllPriceVolumeTradeData array[1] always has correct DarkPoolTrade.
+  const requestBody = {
+    StartDateKey: dateKey(startDate),
+    EndDateKey: dateKey(endDate),
+    Ticker: ticker,
+    VolumeProfile: 0,
+    Levels: tradeCount,
+    MinVolume: 0,
+    MaxVolume: 2000000000,
+    MinDollars: 500000,
+    MaxDollars: 30000000000,
+    DarkPools: -1,
+    Sweeps: -1,
+    LatePrints: -1,
+    SignaturePrints: -1,
+    TradeCount: tradeCount,
+    MinPrice: 0,
+    MaxPrice: 100000,
+    VCD: 0,
+    TradeRank: -1,
+    TradeRankSnapshot: -1,
+    IncludePremarket: 1,
+    IncludeRTH: 1,
+    IncludeAH: 1,
+    IncludeOpening: 1,
+    IncludeClosing: 1,
+    IncludePhantom: 1,
+    IncludeOffsetting: 1
+  };
 
   console.log('📤 VL Trades request:', {
     ticker,
     startDate,
     endDate,
     tradeCount,
-    requestUrl: 'https://www.volumeleaders.com/Chart0/GetTrades',
-    referer: chartUrl,
-    bodyLength: params.toString().length
+    requestUrl: 'https://www.volumeleaders.com/Chart0/GetAllPriceVolumeTradeData',
+    referer: chartUrl
   });
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), VL_TRADES_TIMEOUT_MS);
 
   try {
-    const response = await fetch('https://www.volumeleaders.com/Chart0/GetTrades', {
+    const response = await fetch('https://www.volumeleaders.com/Chart0/GetAllPriceVolumeTradeData', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'Content-Type': 'application/json',
         'Accept': 'application/json, text/javascript, */*; q=0.01',
         'Origin': 'https://www.volumeleaders.com',
         'Referer': chartUrl,
@@ -747,7 +702,7 @@ async function fetchVlTrades(ticker, tradeCount = 10, visibleRange = null, now =
       credentials: 'include',
       referrer: chartUrl,
       signal: controller.signal,
-      body: params.toString()
+      body: JSON.stringify(requestBody)
     });
     clearTimeout(timeoutId);
 
@@ -766,9 +721,11 @@ async function fetchVlTrades(ticker, tradeCount = 10, visibleRange = null, now =
     }
 
     const json = await response.json();
-    console.log(`📦 VL API returned ${json.data?.length || 0} trades`);
+    // Response is an array of arrays; index 1 = individual trades with accurate flags
+    const tradeData = Array.isArray(json) && json.length > 1 ? json[1] : [];
+    console.log(`📦 VL API returned ${tradeData.length} trades`);
 
-    if (!json.data || json.data.length === 0) {
+    if (tradeData.length === 0) {
       return {
         success: true,
         ticker,
@@ -778,7 +735,7 @@ async function fetchVlTrades(ticker, tradeCount = 10, visibleRange = null, now =
     }
 
     // Parse and store the trades
-    const trades = json.data.map(item => {
+    const trades = tradeData.map(item => {
       // Parse .NET JSON date format: "/Date(1748563200000)/"
       const fullDateTimestamp = parseVlFullDateTime(item.FullDateTime);
       const dateMatch = item.Date?.match(/\/Date\((\d+)\)\//);
@@ -795,7 +752,7 @@ async function fetchVlTrades(ticker, tradeCount = 10, visibleRange = null, now =
         dollars: item.Dollars,
         dollarVolume: item.Dollars,
         volume: item.Volume,
-        darkPool: isVlFlagEnabled(item.DarkPool),
+        darkPool: isVlFlagEnabled(item.DarkPoolTrade),
         sweep: isVlFlagEnabled(item.Sweep),
         fullDateTime: item.FullDateTime,
         source: `trades-fetch:${ticker}`

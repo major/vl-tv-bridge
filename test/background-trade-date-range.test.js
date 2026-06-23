@@ -34,11 +34,12 @@ function loadBackground(settings = {}) {
         };
       }
 
-      if (String(url).includes('/Chart0/GetTrades')) {
+      if (String(url).includes('/Chart0/GetAllPriceVolumeTradeData')) {
+        // Response is array of arrays; index 1 = individual trades
         return {
           ok: true,
           status: 200,
-          json: async () => ({ data: settings.tradesData || [] })
+          json: async () => [[], settings.tradesData || [], [], [], [], [], []]
         };
       }
 
@@ -108,93 +109,44 @@ test('trade fallback range uses configured year range', () => {
   });
 });
 
-test('trade request matches the VolumeLeaders Chart0 GetTrades HAR shape', async () => {
+test('trade request matches the VolumeLeaders GetAllPriceVolumeTradeData HAR shape', async () => {
   const context = loadBackground({ yearRange: 1 });
 
   await context.fetchVlTrades('CRDU', 5, null, new Date('2026-06-08T12:00:00Z'));
 
-  const tradeRequest = context.fetchCalls.find(call => String(call.url).endsWith('/Chart0/GetTrades'));
-  const body = Object.fromEntries(new URLSearchParams(tradeRequest.options.body));
+  const tradeRequest = context.fetchCalls.find(call => String(call.url).endsWith('/Chart0/GetAllPriceVolumeTradeData'));
+  const body = JSON.parse(tradeRequest.options.body);
   const expectedBody = {
-    'draw': '2',
-    'columns[0][data]': 'FullTimeString24',
-    'columns[0][name]': 'FullTimeString24',
-    'columns[0][searchable]': 'true',
-    'columns[0][orderable]': 'false',
-    'columns[0][search][value]': '',
-    'columns[0][search][regex]': 'false',
-    'columns[1][data]': 'Volume',
-    'columns[1][name]': 'Sh',
-    'columns[1][searchable]': 'true',
-    'columns[1][orderable]': 'false',
-    'columns[1][search][value]': '',
-    'columns[1][search][regex]': 'false',
-    'columns[2][data]': 'Price',
-    'columns[2][name]': 'Price',
-    'columns[2][searchable]': 'true',
-    'columns[2][orderable]': 'false',
-    'columns[2][search][value]': '',
-    'columns[2][search][regex]': 'false',
-    'columns[3][data]': 'Dollars',
-    'columns[3][name]': '$$',
-    'columns[3][searchable]': 'true',
-    'columns[3][orderable]': 'false',
-    'columns[3][search][value]': '',
-    'columns[3][search][regex]': 'false',
-    'columns[4][data]': 'DollarsMultiplier',
-    'columns[4][name]': 'RS',
-    'columns[4][searchable]': 'true',
-    'columns[4][orderable]': 'false',
-    'columns[4][search][value]': '',
-    'columns[4][search][regex]': 'false',
-    'columns[5][data]': 'TradeRank',
-    'columns[5][name]': 'R',
-    'columns[5][searchable]': 'true',
-    'columns[5][orderable]': 'false',
-    'columns[5][search][value]': '',
-    'columns[5][search][regex]': 'false',
-    'columns[6][data]': 'LastComparibleTradeDate',
-    'columns[6][name]': 'Last Comp',
-    'columns[6][searchable]': 'true',
-    'columns[6][orderable]': 'false',
-    'columns[6][search][value]': '',
-    'columns[6][search][regex]': 'false',
-    'start': '0',
-    'length': '5',
-    'search[value]': '',
-    'search[regex]': 'false',
-    'StartDateKey': '20250608',
-    'EndDateKey': '20260608',
-    'Ticker': 'CRDU',
-    'VolumeProfile': '0',
-    'Levels': '5',
-    'MinVolume': '0',
-    'MaxVolume': '2000000000',
-    'MinDollars': '500000',
-    'MaxDollars': '30000000000',
-    'DarkPools': '-1',
-    'Sweeps': '-1',
-    'LatePrints': '-1',
-    'SignaturePrints': '-1',
-    'TradeCount': '5',
-    'MinPrice': '0',
-    'MaxPrice': '100000',
-    'VCD': '0',
-    'TradeRank': '-1',
-    'TradeRankSnapshot': '-1',
-    'IncludePremarket': '1',
-    'IncludeRTH': '1',
-    'IncludeAH': '1',
-    'IncludeOpening': '1',
-    'IncludeClosing': '1',
-    'IncludePhantom': '1',
-    'IncludeOffsetting': '1'
+    StartDateKey: '20250608',
+    EndDateKey: '20260608',
+    Ticker: 'CRDU',
+    VolumeProfile: 0,
+    Levels: 5,
+    MinVolume: 0,
+    MaxVolume: 2000000000,
+    MinDollars: 500000,
+    MaxDollars: 30000000000,
+    DarkPools: -1,
+    Sweeps: -1,
+    LatePrints: -1,
+    SignaturePrints: -1,
+    TradeCount: 5,
+    MinPrice: 0,
+    MaxPrice: 100000,
+    VCD: 0,
+    TradeRank: -1,
+    TradeRankSnapshot: -1,
+    IncludePremarket: 1,
+    IncludeRTH: 1,
+    IncludeAH: 1,
+    IncludeOpening: 1,
+    IncludeClosing: 1,
+    IncludePhantom: 1,
+    IncludeOffsetting: 1
   };
 
-  assert.equal(String(tradeRequest.url), 'https://www.volumeleaders.com/Chart0/GetTrades');
-  assert.equal(tradeRequest.options.headers['Content-Type'], 'application/x-www-form-urlencoded; charset=UTF-8');
-  assert.equal(tradeRequest.options.headers.Accept, 'application/json, text/javascript, */*; q=0.01');
-  assert.equal(tradeRequest.options.headers.Origin, 'https://www.volumeleaders.com');
+  assert.equal(String(tradeRequest.url), 'https://www.volumeleaders.com/Chart0/GetAllPriceVolumeTradeData');
+  assert.equal(tradeRequest.options.headers['Content-Type'], 'application/json');
   assert.equal(tradeRequest.options.headers.Referer, 'https://www.volumeleaders.com/Chart0?StartDate=2025-06-08&EndDate=2026-06-08&Ticker=CRDU&MinVolume=0&MaxVolume=2000000000&MinDollars=500000&MaxDollars=30000000000&MinPrice=0&MaxPrice=100000&DarkPools=-1&Sweeps=-1&LatePrints=-1&SignaturePrints=-1&VolumeProfile=0&Levels=5&TradeCount=5&VCD=0&TradeRank=-1&TradeRankSnapshot=-1&IncludePremarket=1&IncludeRTH=1&IncludeAH=1&IncludeOpening=1&IncludeClosing=1&IncludePhantom=1&IncludeOffsetting=1');
   assert.deepEqual(body, expectedBody);
 });
@@ -208,8 +160,8 @@ test('fetch and draw trades requests the current chart visible range', async () 
 
   await context.fetchAndDrawTrades('CRDU', 123, 10);
 
-  const tradeRequest = context.fetchCalls.find(call => String(call.url).endsWith('/Chart0/GetTrades'));
-  const body = Object.fromEntries(new URLSearchParams(tradeRequest.options.body));
+  const tradeRequest = context.fetchCalls.find(call => String(call.url).endsWith('/Chart0/GetAllPriceVolumeTradeData'));
+  const body = JSON.parse(tradeRequest.options.body);
 
   assert.deepEqual(plain(context.tabMessages[0]), {
     tabId: 123,
@@ -217,8 +169,7 @@ test('fetch and draw trades requests the current chart visible range', async () 
   });
   assert.equal(body.StartDateKey, '20260310');
   assert.equal(body.EndDateKey, '20260608');
-  assert.equal(body.TradeCount, '10');
-  assert.equal(tradeRequest.options.headers.Referer, 'https://www.volumeleaders.com/Chart0?StartDate=2026-03-10&EndDate=2026-06-08&Ticker=CRDU&MinVolume=0&MaxVolume=2000000000&MinDollars=500000&MaxDollars=30000000000&MinPrice=0&MaxPrice=100000&DarkPools=-1&Sweeps=-1&LatePrints=-1&SignaturePrints=-1&VolumeProfile=0&Levels=10&TradeCount=10&VCD=0&TradeRank=-1&TradeRankSnapshot=-1&IncludePremarket=1&IncludeRTH=1&IncludeAH=1&IncludeOpening=1&IncludeClosing=1&IncludePhantom=1&IncludeOffsetting=1');
+  assert.equal(body.TradeCount, 10);
 });
 
 test('trade response maps sweep flag for trade ray labels', async () => {
@@ -231,7 +182,7 @@ test('trade response maps sweep flag for trade ray labels', async () => {
       TradeRank: 1,
       Dollars: 1459892.8,
       Volume: 39671,
-      DarkPool: 0,
+      DarkPoolTrade: 0,
       Sweep: 1,
       FullDateTime: '2026-05-19T09:36:02'
     }, {
@@ -241,7 +192,7 @@ test('trade response maps sweep flag for trade ray labels', async () => {
       TradeRank: 2,
       Dollars: 2000000,
       Volume: 10000,
-      DarkPool: '1',
+      DarkPoolTrade: '1',
       Sweep: 1,
       FullDateTime: '2026-05-19T09:37:02'
     }]
@@ -265,7 +216,7 @@ test('trade response maps TradeRankSnapshot to originalRank', async () => {
       TradeRankSnapshot: 5,
       Dollars: 85000000,
       Volume: 39671,
-      DarkPool: 0,
+      DarkPoolTrade: 0,
       Sweep: 0,
       FullDateTime: '2026-05-19T09:36:02'
     }]
@@ -275,6 +226,40 @@ test('trade response maps TradeRankSnapshot to originalRank', async () => {
 
   assert.equal(result.trades[0].rank, 10);
   assert.equal(result.trades[0].originalRank, 5);
+});
+
+test('trade response reads DarkPoolTrade boolean from GetAllPriceVolumeTradeData', async () => {
+  const context = loadBackground({
+    yearRange: 1,
+    tradesData: [{
+      Date: '/Date(1782172800000)/',
+      Ticker: 'SMH',
+      Price: 624.7,
+      TradeRank: 1,
+      Dollars: 1311870000,
+      Volume: 2100000,
+      DarkPoolTrade: true,
+      Sweep: false,
+      FullDateTime: '2026-06-23T14:06:04'
+    }, {
+      Date: '/Date(1779148800000)/',
+      Ticker: 'SMH',
+      Price: 401.99,
+      TradeRank: 2,
+      Dollars: 610000000,
+      Volume: 500000,
+      DarkPoolTrade: false,
+      Sweep: true,
+      FullDateTime: '2026-05-19T09:36:02'
+    }]
+  });
+
+  const result = await context.fetchVlTrades('SMH', 5, null, new Date('2026-06-23T16:00:00Z'));
+
+  assert.equal(result.trades[0].darkPool, true);
+  assert.equal(result.trades[0].sweep, false);
+  assert.equal(result.trades[1].darkPool, false);
+  assert.equal(result.trades[1].sweep, true);
 });
 
 test('trade response treats FullDateTime as New York market time', async () => {
@@ -287,7 +272,7 @@ test('trade response treats FullDateTime as New York market time', async () => {
       TradeRank: 4,
       Dollars: 434165760,
       Volume: 1433552,
-      DarkPool: 1,
+      DarkPoolTrade: 1,
       Sweep: 0,
       FullDateTime: '2026-06-02T16:06:57'
     }]

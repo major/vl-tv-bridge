@@ -722,7 +722,7 @@ async function fetchVlTrades(ticker, tradeCount = 10, visibleRange = null, now =
 
     const json = await response.json();
     // Response is an array of arrays; index 1 = individual trades with accurate flags
-    const tradeData = Array.isArray(json) && json.length > 1 ? json[1] : [];
+    const tradeData = Array.isArray(json) && Array.isArray(json[1]) ? json[1] : [];
     console.log(`📦 VL API returned ${tradeData.length} trades`);
 
     if (tradeData.length === 0) {

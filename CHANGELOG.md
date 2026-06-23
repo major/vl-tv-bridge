@@ -3,6 +3,13 @@
 All notable changes to VL-TV Bridge.
 
 
+## [1.8.7](///compare/v1.8.6...v1.8.7) (2026-06-23)
+
+### Bug Fixes
+
+* **trades:** add Array.isArray guard on response sub-array 090f593
+* **trades:** use GetAllPriceVolumeTradeData for accurate dark pool flags 709dbae
+
 ## [1.8.6](///compare/v1.8.5...v1.8.6) (2026-06-23)
 
 ### Features

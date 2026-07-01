@@ -360,7 +360,8 @@
       showLabel: true,
       textcolor: options.textcolor || color,
       fontsize: options.fontsize || 12,
-      bold: options.bold !== false
+      bold: options.bold !== false,
+      horzLabelsAlign: options.horzLabelsAlign || 'right'
     };
 
     const shapeConfig = {

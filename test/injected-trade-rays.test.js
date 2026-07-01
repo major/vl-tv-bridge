@@ -257,6 +257,51 @@ test('DRAW_NOTE omits original trade rank unless enabled with an integer rank', 
   ]);
 });
 
+test('DRAW_NOTE applies horzLabelsAlign from options with right as default', async () => {
+  const createShapeCalls = [];
+  const chart = {
+    createShape(point, config) {
+      createShapeCalls.push({ point, config });
+      return `ray-${createShapeCalls.length}`;
+    },
+    getVisibleRange() {
+      return { from: 1700000000, to: 1800000000 };
+    }
+  };
+  const injected = loadInjected(chart);
+
+  // Default (no option) should be right
+  await injected.send('DRAW_NOTE', {
+    price: 10,
+    timestamp: 1712345678,
+    rank: 1,
+    dollarVolume: 1000
+  });
+
+  // Explicit left
+  await injected.send('DRAW_NOTE', {
+    price: 20,
+    timestamp: 1712345678,
+    rank: 2,
+    dollarVolume: 2000,
+    options: { horzLabelsAlign: 'left' }
+  });
+
+  // Explicit right
+  await injected.send('DRAW_NOTE', {
+    price: 30,
+    timestamp: 1712345678,
+    rank: 3,
+    dollarVolume: 3000,
+    options: { horzLabelsAlign: 'right' }
+  });
+
+  assert.equal(createShapeCalls.length, 3);
+  assert.equal(createShapeCalls[0].config.overrides.horzLabelsAlign, 'right');
+  assert.equal(createShapeCalls[1].config.overrides.horzLabelsAlign, 'left');
+  assert.equal(createShapeCalls[2].config.overrides.horzLabelsAlign, 'right');
+});
+
 test('DRAW_NOTE only creates shapes for ranks from 1 through 100', async () => {
   const createShapeCalls = [];
   const chart = {

@@ -60,6 +60,7 @@ const elements = {
   tradeDarkPoolColorInput: document.getElementById('trade-dark-pool-color-input'),
   tradeThicknessSelect: document.getElementById('trade-thickness-select'),
   showOriginalTradeRankToggle: document.getElementById('show-original-trade-rank-toggle'),
+  tradeLabelPositionSelect: document.getElementById('trade-label-position-select'),
   yearRangeSelect: document.getElementById('year-range-select'),
   clusteringToggle: document.getElementById('clustering-toggle'),
   thresholdSelect: document.getElementById('threshold-select'),
@@ -101,7 +102,7 @@ async function init() {
   const stored = await browser.storage.local.get([
     'debugMode', 'levelCount', 'tradeCount', 'yearRange', 'clusteringEnabled', 'clusterThreshold',
     'lineColor', 'lineThickness', 'lineOpacity', 'showDates', 'tradeLitColor', 'tradeDarkPoolColor', 'tradeThickness',
-    'showOriginalTradeRank'
+    'showOriginalTradeRank', 'tradeLabelPosition'
   ]);
   elements.debugToggle.checked = stored.debugMode || false;
   elements.levelCountSelect.value = stored.levelCount ?? 10;
@@ -117,6 +118,7 @@ async function init() {
   elements.lineThicknessSelect.value = stored.lineThickness ?? 2;
   elements.lineOpacitySelect.value = stored.lineOpacity ?? 100;
   elements.showDatesToggle.checked = stored.showDates || false; // Default false
+  elements.tradeLabelPositionSelect.value = stored.tradeLabelPosition || 'right';
   updateThresholdVisibility();
 
   // Set up event listeners
@@ -304,6 +306,7 @@ async function fetchAndDrawTrades() {
     const tradeDarkPoolColor = normalizeColorForDraw(elements.tradeDarkPoolColorInput?.value, '#FF9800');
     const tradeThickness = parseInt(elements.tradeThicknessSelect?.value, 10) || 2;
     const showOriginalTradeRank = elements.showOriginalTradeRankToggle?.checked || false;
+    const tradeLabelPosition = elements.tradeLabelPositionSelect?.value || 'right';
 
     // Send fetch request with tabId - background script handles drawing
     const response = await browser.runtime.sendMessage({
@@ -315,7 +318,8 @@ async function fetchAndDrawTrades() {
         tradeLitColor,
         tradeDarkPoolColor,
         tradeThickness,
-        showOriginalTradeRank
+        showOriginalTradeRank,
+        horzLabelsAlign: tradeLabelPosition
       }
     });
 
@@ -450,6 +454,12 @@ async function handleShowOriginalTradeRankToggle() {
   console.log('⚙️ Show original trade rank enabled:', enabled);
 }
 
+async function handleTradeLabelPositionChange() {
+  const position = elements.tradeLabelPositionSelect.value;
+  await browser.storage.local.set({ tradeLabelPosition: position });
+  console.log('⚙️ Trade label position set to:', position);
+}
+
 /**
  * Handle year range selection change
  */
@@ -557,6 +567,7 @@ function setupEventListeners() {
   elements.tradeDarkPoolColorInput.addEventListener('input', handleTradeDarkPoolColorChange);
   elements.tradeThicknessSelect.addEventListener('change', handleTradeThicknessChange);
   elements.showOriginalTradeRankToggle.addEventListener('change', handleShowOriginalTradeRankToggle);
+  elements.tradeLabelPositionSelect.addEventListener('change', handleTradeLabelPositionChange);
 
   // Tab switching
   document.querySelectorAll('.tab').forEach(tab => {

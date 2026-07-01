@@ -3,6 +3,12 @@
 All notable changes to VL-TV Bridge.
 
 
+## [1.8.8](///compare/v1.8.7...v1.8.8) (2026-07-01)
+
+### Features
+
+* **trades:** make label position configurable (left/right) f5d5063
+
 ## [1.8.7](///compare/v1.8.6...v1.8.7) (2026-06-23)
 
 ### Bug Fixes

@@ -29,7 +29,7 @@ function loadBackground(settings = {}) {
           ok: true,
           status: 200,
           json: async () => ({
-            data: [{ Price: 36.8, TradeLevelRank: 1, Dollars: 1459892.8, Volume: 39671, Trades: 1, Dates: '2026-05-19 - 2026-05-19' }]
+            data: settings.levelsData || [{ Price: 36.8, TradeLevelRank: 1, Dollars: 1459892.8, Volume: 39671, Trades: 1, Dates: '2026-05-19 - 2026-05-19' }]
           })
         };
       }
@@ -358,4 +358,25 @@ test('level request matches the VolumeLeaders Chart0 GetTradeLevels HAR shape', 
   assert.equal(levelRequest.options.headers.Referer, 'https://www.volumeleaders.com/Chart0?StartDate=2025-06-08&EndDate=2026-06-08&Ticker=CRDU&MinVolume=0&MaxVolume=2000000000&MinDollars=500000&MaxDollars=30000000000&MinPrice=0&MaxPrice=100000&DarkPools=-1&Sweeps=-1&LatePrints=-1&SignaturePrints=-1&VolumeProfile=0&Levels=5&TradeCount=3&VCD=0&TradeRank=-1&TradeRankSnapshot=-1&IncludePremarket=1&IncludeRTH=1&IncludeAH=1&IncludeOpening=1&IncludeClosing=1&IncludePhantom=1&IncludeOffsetting=1');
   assert.deepEqual(body, expectedBody);
   assert.equal(result.levels[0].price, 36.8);
+});
+
+test('levels parse MinDate and propagate the earliest clustered anchor to drawing', async () => {
+  const context = loadBackground({
+    clusteringEnabled: true,
+    clusterThreshold: 1,
+    levelsData: [
+      { Price: 100, TradeLevelRank: 1, Dollars: 1000000, Dates: '2026-05-19 - 2026-05-19', MinDate: '/Date(1779148800000)/' },
+      { Price: 100.5, TradeLevelRank: 2, Dollars: 1000000, Dates: '2026-05-20 - 2026-05-20', MinDate: 1779062400 },
+      { Price: 110, TradeLevelRank: 3, Dollars: 1000000, Dates: '2026-05-21 - 2026-05-21', MinDate: 'invalid' }
+    ]
+  });
+
+  const levels = await context.fetchVlLevels('CRDU', new Date('2026-06-08T12:00:00Z'));
+  assert.deepEqual(levels.levels.map(level => level.timestamp), [1779148800, 1779062400, null]);
+
+  await context.fetchAndDraw('CRDU', 123);
+  const drawMessage = context.tabMessages.find(entry => entry.message.type === 'DRAW_LEVELS').message;
+  assert.equal(drawMessage.levels[0].type, 'zone');
+  assert.equal(drawMessage.levels[0].timestamp, 1779062400);
+  assert.equal(drawMessage.levels[1].timestamp, null);
 });

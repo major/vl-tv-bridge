@@ -166,7 +166,8 @@
       throw new Error(error);
     }
 
-    const { price, label, options = {} } = data;
+    const { price, timestamp, label, options = {} } = data;
+    const hasValidTimestamp = Number.isFinite(timestamp) && timestamp > 0;
 
     const linecolor = applyOpacity(options.linecolor || '#02A9DE', options.lineopacity ?? 100);
 
@@ -187,7 +188,7 @@
     console.log('🎨 INJECTED: Line overrides:', JSON.stringify(overrides));
 
     const shapeConfig = {
-      shape: 'horizontal_line',
+      shape: hasValidTimestamp ? 'horizontal_ray' : 'horizontal_line',
       text: label || `VL ${price}`,
       overrides: overrides
     };
@@ -196,7 +197,7 @@
 
     try {
       const shapeId = await chart.createShape(
-        { price: price },
+        hasValidTimestamp ? { price: price, time: timestamp } : { price: price },
         shapeConfig
       );
 
@@ -239,7 +240,8 @@
       throw new Error(error);
     }
 
-    const { highPrice, lowPrice, midPrice, label, options = {} } = data;
+    const { highPrice, lowPrice, midPrice, timestamp, label, options = {} } = data;
+    const hasValidTimestamp = Number.isFinite(timestamp) && timestamp > 0;
 
     const linecolor = applyOpacity(options.linecolor || '#02A9DE', options.lineopacity ?? 100);
 
@@ -260,7 +262,7 @@
     console.log('🎨 INJECTED: Zone overrides:', JSON.stringify(overrides));
 
     const shapeConfig = {
-      shape: 'horizontal_line',
+      shape: hasValidTimestamp ? 'horizontal_ray' : 'horizontal_line',
       text: label || `VL Zone [${lowPrice.toFixed(2)}-${highPrice.toFixed(2)}]`,
       overrides: overrides
     };
@@ -269,7 +271,7 @@
 
     try {
       const shapeId = await chart.createShape(
-        { price: midPrice },
+        hasValidTimestamp ? { price: midPrice, time: timestamp } : { price: midPrice },
         shapeConfig
       );
 
@@ -483,8 +485,8 @@
 
       for (const shape of allShapes) {
         try {
-          // Only target horizontal_line shapes
-          if (shape.name !== 'horizontal_line') continue;
+          // Target level/zone lines and rays, but leave trade rays intact.
+          if (shape.name !== 'horizontal_line' && shape.name !== 'horizontal_ray') continue;
 
           // Get shape properties to check the text
           const shapeObj = chart.getShapeById(shape.id);

@@ -69,6 +69,24 @@ function parseVlFullDateTime(fullDateTime) {
 }
 
 /**
+ * Parse a VolumeLeaders date into Unix seconds. Trade levels use MinDate in
+ * .NET JSON form (/Date(1748563200000)/), but accept normalized numeric
+ * timestamps too so older or malformed responses retain line fallback.
+ */
+function parseVlTimestamp(value) {
+  if (value === null || value === undefined || value === '') return null;
+
+  const dotNetMatch = typeof value === 'string' && value.match(/^\/Date\((-?\d+)(?:[+-]\d+)?\)\/$/);
+  const numericValue = dotNetMatch ? Number(dotNetMatch[1]) : Number(value);
+  if (!Number.isFinite(numericValue)) return null;
+
+  // Milliseconds are used by .NET JSON and Date.now(); normalized values are
+  // already Unix seconds.
+  const timestamp = Math.abs(numericValue) >= 1e11 ? numericValue / 1000 : numericValue;
+  return Number.isFinite(timestamp) && timestamp > 0 ? timestamp : null;
+}
+
+/**
  * Initialize extension
  */
 async function init() {
@@ -519,7 +537,8 @@ async function fetchVlLevels(ticker, now = new Date()) {
       dollars: item.Dollars || item.dollars,
       volume: item.Volume || item.volume,
       trades: item.Trades || item.trades,
-      dates: item.Dates || item.dates
+      dates: item.Dates || item.dates,
+      timestamp: parseVlTimestamp(item.MinDate ?? item.minDate)
     })).filter(l => l.price && typeof l.price === 'number');
 
     console.log(`📊 Fetched ${levels.length} levels for ${ticker}`);
@@ -981,6 +1000,7 @@ function finalizeCluster(levels) {
   const prices = levels.map(l => l.price);
   const ranks = levels.map(l => l.rank).filter(Boolean).sort((a, b) => a - b);
   const totalDollars = levels.reduce((sum, l) => sum + (l.dollars || 0), 0);
+  const timestamps = levels.map(l => l.timestamp).filter(timestamp => Number.isFinite(timestamp) && timestamp > 0);
   const highPrice = Math.max(...prices);
   const lowPrice = Math.min(...prices);
 
@@ -989,6 +1009,7 @@ function finalizeCluster(levels) {
     highPrice,
     lowPrice,
     midPrice: (highPrice + lowPrice) / 2,
+    timestamp: timestamps.length > 0 ? Math.min(...timestamps) : null,
     levels,
     aggregated: {
       rankRange: ranks.length > 0 ? [ranks[0], ranks[ranks.length - 1]] : [null, null],

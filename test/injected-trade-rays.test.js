@@ -76,6 +76,25 @@ test('DRAW_LINE applies configured opacity to level color', async () => {
   assert.equal(createShapeCalls[0].config.overrides.textcolor, 'rgba(17, 34, 51, 0.5)');
 });
 
+test('DRAW_LINE and DRAW_ZONE create rays from valid timestamps and lines otherwise', async () => {
+  const createShapeCalls = [];
+  const chart = {
+    createShape(point, config) {
+      createShapeCalls.push({ point, config });
+      return `shape-${createShapeCalls.length}`;
+    }
+  };
+  const injected = loadInjected(chart);
+
+  await injected.send('DRAW_LINE', { price: 100, timestamp: 1712345678, label: 'VL #1' });
+  await injected.send('DRAW_ZONE', { highPrice: 101, lowPrice: 99, midPrice: 100, timestamp: null, label: 'VL #1,2' });
+
+  assert.deepEqual(plain(createShapeCalls[0].point), { price: 100, time: 1712345678 });
+  assert.equal(createShapeCalls[0].config.shape, 'horizontal_ray');
+  assert.deepEqual(plain(createShapeCalls[1].point), { price: 100 });
+  assert.equal(createShapeCalls[1].config.shape, 'horizontal_line');
+});
+
 test('DRAW_NOTE creates a horizontal ray from the actual trade timestamp', async () => {
   const createShapeCalls = [];
   const chart = {
@@ -372,4 +391,22 @@ test('CLEAR_VL_NOTES removes existing VL horizontal rays and legacy notes', asyn
   assert.equal(response.error, null);
   assert.deepEqual(plain(response.result), { removed: 2 });
   assert.deepEqual(removed, ['ray-1', 'note-1']);
+});
+
+test('CLEAR_VL_LINES removes VL level rays and lines without removing trade rays', async () => {
+  const removed = [];
+  const chart = {
+    getAllShapes: () => [
+      { id: 'level-ray', name: 'horizontal_ray' },
+      { id: 'level-line', name: 'horizontal_line' },
+      { id: 'trade-ray', name: 'horizontal_ray' }
+    ],
+    getShapeById: id => ({ getProperties: () => ({ text: id === 'trade-ray' ? '● VL #1 $1B' : 'VL #1 $1B' }) }),
+    removeEntity: id => removed.push(id)
+  };
+  const injected = loadInjected(chart);
+
+  const response = await injected.send('CLEAR_VL_LINES');
+  assert.deepEqual(plain(response.result), { removed: 2 });
+  assert.deepEqual(removed, ['level-ray', 'level-line']);
 });

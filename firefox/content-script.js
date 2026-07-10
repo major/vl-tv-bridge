@@ -175,6 +175,7 @@ if (window !== window.top) {
             highPrice: item.highPrice,
             lowPrice: item.lowPrice,
             midPrice: item.midPrice,
+            timestamp: item.timestamp,
             label: item.label,
             options: {
               linecolor: options.color || '#02A9DE',
@@ -199,6 +200,7 @@ if (window !== window.top) {
           // Draw single level as normal line
           result = await sendToInjected('DRAW_LINE', {
             price: item.price,
+            timestamp: item.timestamp,
             label: item.label || `VL ${item.price}`,
             options: {
               linecolor: options.color || '#02A9DE',

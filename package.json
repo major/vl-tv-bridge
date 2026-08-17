@@ -18,7 +18,7 @@
   "devDependencies": {
     "@release-it/conventional-changelog": "11.0.1",
     "release-it": "20.2.1",
-    "web-ext": "10.5.0"
+    "web-ext": "10.6.0"
   },
   "repository": {
     "type": "git",

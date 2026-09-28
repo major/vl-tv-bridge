@@ -74,7 +74,6 @@ const elements = {
 // State
 
 let tvReady = false;
-let vlReady = false;
 let currentSymbol = null;
 let currentTabId = null;
 
@@ -189,16 +188,13 @@ async function checkVlAuth() {
     const response = await browser.runtime.sendMessage({ type: 'CHECK_VL_AUTH' });
 
     if (response?.authenticated) {
-      vlReady = true;
-      setVlStatus('ready', 'VolumeLeaders logged in');
+      setVlStatus('ready', 'VL cookie found');
     } else {
-      vlReady = false;
-      setVlStatus('not-ready', 'Not logged into VL');
+      setVlStatus('unverified', 'Session not verified');
     }
   } catch (err) {
     console.error('Failed to check VL auth:', err);
-    vlReady = false;
-    setVlStatus('not-ready', 'VL auth check failed');
+    setVlStatus('unverified', 'Session not verified');
   }
 }
 
@@ -222,7 +218,7 @@ function setVlStatus(state, text) {
  * Update button states based on current status
  */
 function updateButtonStates() {
-  const canFetchDraw = tvReady && vlReady && currentSymbol;
+  const canFetchDraw = tvReady && currentSymbol;
   elements.fetchDrawBtn.disabled = !canFetchDraw;
   elements.fetchTradesBtn.disabled = !canFetchDraw;
 
@@ -265,8 +261,8 @@ async function fetchAndDraw() {
       }
     });
 
-    if (!response.success) {
-      throw new Error(response.error || 'Failed to fetch levels');
+    if (!response?.success) {
+      throw new Error(response?.error || 'VolumeLeaders session could not be verified');
     }
 
     if (response.levels.length === 0) {
@@ -323,8 +319,8 @@ async function fetchAndDrawTrades() {
       }
     });
 
-    if (!response.success) {
-      throw new Error(response.error || 'Failed to fetch trades');
+    if (!response?.success) {
+      throw new Error(response?.error || 'VolumeLeaders session could not be verified');
     }
 
     if (response.trades.length === 0) {

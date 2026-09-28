@@ -179,6 +179,10 @@ header h1 {
   background: #f44336;
 }
 
+.vl-status.unverified .indicator {
+  background: #888;
+}
+
 .tv-status.checking .indicator,
 .vl-status.checking .indicator {
   background: #FFC107;

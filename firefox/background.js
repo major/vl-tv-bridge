@@ -358,12 +358,12 @@ async function getXsrfToken(forceRefresh = false) {
       redirect: 'follow'
     });
 
-    if (!response.ok) {
-      throw new Error(`Failed to fetch VL page: ${response.status}`);
+    if (response.status === 401 || response.status === 403 || isVlLoginRedirect(response)) {
+      throw new Error('VolumeLeaders session expired. Please log in again.');
     }
 
-    if (response.url.includes('/Login')) {
-      throw new Error('Please log in to VolumeLeaders.com first, then try again');
+    if (!response.ok) {
+      throw new Error(`Failed to fetch VL page: ${response.status}`);
     }
 
     const html = await response.text();
@@ -375,13 +375,13 @@ async function getXsrfToken(forceRefresh = false) {
     // Extract token from hidden input: <input name="__RequestVerificationToken" ... value="TOKEN" />
     const tokenMatch = html.match(/name="__RequestVerificationToken"[^>]*value="([^"]+)"/);
     if (!tokenMatch) {
-      throw new Error('Please log in to VolumeLeaders.com first, then try again');
+      throw new Error('VolumeLeaders page did not contain an XSRF token.');
     }
 
     xsrfToken = tokenMatch[1];
     xsrfTokenExpiry = Date.now() + TOKEN_TTL_MS;
 
-    console.log('🔑 Got fresh XSRF token:', xsrfToken.substring(0, 20) + '...');
+    console.log('🔑 Got fresh XSRF token');
     return xsrfToken;
 
   } catch (err) {
@@ -412,12 +412,6 @@ async function fetchVlLevels(ticker, now = new Date()) {
   const tradeCount = String(settings.tradeCount ?? 5);
   const yearRange = settings.yearRange ?? 5;
 
-  // Check authentication first
-  const auth = await checkVlAuth();
-  if (!auth.authenticated) {
-    throw new Error('Not logged into VolumeLeaders. Please log in at volumeleaders.com first.');
-  }
-
   // Get XSRF token for anti-forgery validation
   const token = await getXsrfToken();
 
@@ -427,71 +421,18 @@ async function fetchVlLevels(ticker, now = new Date()) {
   const startDate = new Date(now.getFullYear() - yearRange, now.getMonth(), now.getDate())
     .toISOString().split('T')[0];
   const chartUrl = buildChart0Url(ticker, startDate, today, levelCount, tradeCount);
-  const params = new URLSearchParams({
-    'draw': '2',
-    'columns[0][data]': 'Price',
-    'columns[0][name]': 'Price',
-    'columns[0][searchable]': 'true',
-    'columns[0][orderable]': 'false',
-    'columns[0][search][value]': '',
-    'columns[0][search][regex]': 'false',
-    'columns[1][data]': 'Dollars',
-    'columns[1][name]': '$$',
-    'columns[1][searchable]': 'true',
-    'columns[1][orderable]': 'false',
-    'columns[1][search][value]': '',
-    'columns[1][search][regex]': 'false',
-    'columns[2][data]': 'Volume',
-    'columns[2][name]': 'Sh',
-    'columns[2][searchable]': 'true',
-    'columns[2][orderable]': 'false',
-    'columns[2][search][value]': '',
-    'columns[2][search][regex]': 'false',
-    'columns[3][data]': 'Trades',
-    'columns[3][name]': 'Trades',
-    'columns[3][searchable]': 'true',
-    'columns[3][orderable]': 'false',
-    'columns[3][search][value]': '',
-    'columns[3][search][regex]': 'false',
-    'columns[4][data]': 'RelativeSize',
-    'columns[4][name]': 'RS',
-    'columns[4][searchable]': 'true',
-    'columns[4][orderable]': 'false',
-    'columns[4][search][value]': '',
-    'columns[4][search][regex]': 'false',
-    'columns[5][data]': 'CumulativeDistribution',
-    'columns[5][name]': 'PCT',
-    'columns[5][searchable]': 'true',
-    'columns[5][orderable]': 'false',
-    'columns[5][search][value]': '',
-    'columns[5][search][regex]': 'false',
-    'columns[6][data]': 'TradeLevelRank',
-    'columns[6][name]': 'Rank',
-    'columns[6][searchable]': 'true',
-    'columns[6][orderable]': 'false',
-    'columns[6][search][value]': '',
-    'columns[6][search][regex]': 'false',
-    'columns[7][data]': 'Dates',
-    'columns[7][name]': 'Dates',
-    'columns[7][searchable]': 'true',
-    'columns[7][orderable]': 'false',
-    'columns[7][search][value]': '',
-    'columns[7][search][regex]': 'false',
-    'start': '0',
-    'length': '-1',
-    'search[value]': '',
-    'search[regex]': 'false',
-    'StartDate': startDate,
-    'EndDate': today,
-    'Ticker': ticker,
-    'Levels': levelCount
-  });
+  const requestBody = {
+    StartDateKey: dateKey(startDate),
+    EndDateKey: dateKey(today),
+    Ticker: ticker,
+    Levels: Number(levelCount)
+  };
 
   try {
-    const response = await fetch('https://www.volumeleaders.com/Chart0/GetTradeLevels', {
+    const response = await fetch('https://www.volumeleaders.com/Chart0/GetChartTradeLevels', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'Content-Type': 'application/json',
         'Accept': 'application/json, text/javascript, */*; q=0.01',
         'Origin': 'https://www.volumeleaders.com',
         'Referer': chartUrl,
@@ -500,15 +441,16 @@ async function fetchVlLevels(ticker, now = new Date()) {
       },
       credentials: 'include',
       referrer: chartUrl,
-      body: params.toString()
+      body: JSON.stringify(requestBody)
     });
 
     console.log(`📡 VL API response status: ${response.status}`);
 
+    if (response.status === 401 || response.status === 403 || isVlLoginRedirect(response)) {
+      throw new Error('VolumeLeaders session expired. Please log in again.');
+    }
+
     if (!response.ok) {
-      if (response.status === 401 || response.status === 403) {
-        throw new Error('VolumeLeaders session expired. Please log in again.');
-      }
       if (response.status === 400) {
         // Token might be stale - invalidate and let caller retry
         xsrfToken = null;
@@ -519,9 +461,13 @@ async function fetchVlLevels(ticker, now = new Date()) {
     }
 
     const json = await response.json();
-    console.log(`📦 VL API returned ${json.data?.length || 0} levels`);
+    if (!Array.isArray(json)) {
+      throw new Error('Invalid VL levels response: expected an array');
+    }
 
-    if (!json.data || json.data.length === 0) {
+    console.log(`📦 VL API returned ${json.length} levels`);
+
+    if (json.length === 0) {
       return {
         success: true,
         ticker,
@@ -530,7 +476,7 @@ async function fetchVlLevels(ticker, now = new Date()) {
       };
     }
 
-    const levels = json.data.map(item => ({
+    const levels = json.map(item => ({
       price: item.Price || item.price,
       symbol: (item.Ticker || ticker).toUpperCase(),
       rank: item.TradeLevelRank || item.rank,
@@ -641,11 +587,6 @@ async function fetchVlTrades(ticker, tradeCount = 10, visibleRange = null, now =
   }
   console.log(`🔍 Fetching VL trades for ${ticker}...`);
 
-  const auth = await checkVlAuth();
-  if (!auth.authenticated) {
-    throw new Error('Not logged into VolumeLeaders. Please log in at volumeleaders.com first.');
-  }
-
   const token = await getXsrfToken();
 
   let yearRange = 5;
@@ -727,10 +668,11 @@ async function fetchVlTrades(ticker, tradeCount = 10, visibleRange = null, now =
 
     console.log(`📡 VL Trades API response status: ${response.status}`);
 
+    if (response.status === 401 || response.status === 403 || isVlLoginRedirect(response)) {
+      throw new Error('VolumeLeaders session expired. Please log in again.');
+    }
+
     if (!response.ok) {
-      if (response.status === 401 || response.status === 403) {
-        throw new Error('VolumeLeaders session expired. Please log in again.');
-      }
       if (response.status === 400) {
         xsrfToken = null;
         xsrfTokenExpiry = 0;
@@ -741,7 +683,10 @@ async function fetchVlTrades(ticker, tradeCount = 10, visibleRange = null, now =
 
     const json = await response.json();
     // Response is an array of arrays; index 1 = individual trades with accurate flags
-    const tradeData = Array.isArray(json) && Array.isArray(json[1]) ? json[1] : [];
+    if (!Array.isArray(json) || !Array.isArray(json[1])) {
+      throw new Error('Invalid VL trades response: expected trade data at index 1');
+    }
+    const tradeData = json[1];
     console.log(`📦 VL API returned ${tradeData.length} trades`);
 
     if (tradeData.length === 0) {
@@ -798,6 +743,10 @@ async function fetchVlTrades(ticker, tradeCount = 10, visibleRange = null, now =
     console.error(`❌ Failed to fetch VL trades for ${ticker}:`, err);
     throw err;
   }
+}
+
+function isVlLoginRedirect(response) {
+  return /\/(?:login|signin)(?:[/?#]|$)/i.test(response.url || '');
 }
 
 function isVlFlagEnabled(value) {

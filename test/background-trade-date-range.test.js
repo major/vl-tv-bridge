@@ -24,22 +24,28 @@ function loadBackground(settings = {}) {
         };
       }
 
-      if (String(url).includes('/Chart0/GetTradeLevels')) {
+      if (String(url).includes('/Chart0/GetChartTradeLevels')) {
+        const response = settings.levelResponse || {};
         return {
-          ok: true,
-          status: 200,
-          json: async () => ({
-            data: settings.levelsData || [{ Price: 36.8, TradeLevelRank: 1, Dollars: 1459892.8, Volume: 39671, Trades: 1, Dates: '2026-05-19 - 2026-05-19' }]
-          })
+          ok: response.ok ?? true,
+          status: response.status ?? 200,
+          statusText: response.statusText ?? 'OK',
+          url: response.url ?? String(url),
+          redirected: response.redirected ?? false,
+          json: async () => response.body ?? settings.levelsData ?? [{ Price: 36.8, TradeLevelRank: 1, Dollars: 1459892.8, Volume: 39671, Trades: 1, Dates: '2026-05-19 - 2026-05-19' }]
         };
       }
 
       if (String(url).includes('/Chart0/GetAllPriceVolumeTradeData')) {
+        const response = settings.tradeResponse || {};
         // Response is array of arrays; index 1 = individual trades
         return {
-          ok: true,
-          status: 200,
-          json: async () => [[], settings.tradesData || [], [], [], [], [], []]
+          ok: response.ok ?? true,
+          status: response.status ?? 200,
+          statusText: response.statusText ?? 'OK',
+          url: response.url ?? String(url),
+          redirected: response.redirected ?? false,
+          json: async () => response.body ?? [[], settings.tradesData ?? [], [], [], [], [], []]
         };
       }
 
@@ -52,7 +58,7 @@ function loadBackground(settings = {}) {
     setTimeout,
     clearTimeout,
     browser: {
-      cookies: { getAll: async () => [{ name: '.ASPXAUTH' }] },
+      cookies: { getAll: async () => settings.cookies ?? [{ name: '.ASPXAUTH' }] },
       runtime: { onMessage: { addListener() {} } },
       storage: { local: { get: async () => settings } },
       tabs: {
@@ -284,80 +290,68 @@ test('trade response treats FullDateTime as New York market time', async () => {
   assert.equal(result.trades[0].darkPool, true);
 });
 
-test('level request matches the VolumeLeaders Chart0 GetTradeLevels HAR shape', async () => {
+test('level request matches the VolumeLeaders Chart0 GetChartTradeLevels HAR shape', async () => {
   const context = loadBackground({ yearRange: 1, levelCount: 5, tradeCount: 3 });
 
   const result = await context.fetchVlLevels('CRDU', new Date('2026-06-08T12:00:00Z'));
 
-  const levelRequest = context.fetchCalls.find(call => String(call.url).endsWith('/Chart0/GetTradeLevels'));
-  const body = Object.fromEntries(new URLSearchParams(levelRequest.options.body));
+  const levelRequest = context.fetchCalls.find(call => String(call.url).endsWith('/Chart0/GetChartTradeLevels'));
+  const body = JSON.parse(levelRequest.options.body);
   const expectedBody = {
-    'draw': '2',
-    'columns[0][data]': 'Price',
-    'columns[0][name]': 'Price',
-    'columns[0][searchable]': 'true',
-    'columns[0][orderable]': 'false',
-    'columns[0][search][value]': '',
-    'columns[0][search][regex]': 'false',
-    'columns[1][data]': 'Dollars',
-    'columns[1][name]': '$$',
-    'columns[1][searchable]': 'true',
-    'columns[1][orderable]': 'false',
-    'columns[1][search][value]': '',
-    'columns[1][search][regex]': 'false',
-    'columns[2][data]': 'Volume',
-    'columns[2][name]': 'Sh',
-    'columns[2][searchable]': 'true',
-    'columns[2][orderable]': 'false',
-    'columns[2][search][value]': '',
-    'columns[2][search][regex]': 'false',
-    'columns[3][data]': 'Trades',
-    'columns[3][name]': 'Trades',
-    'columns[3][searchable]': 'true',
-    'columns[3][orderable]': 'false',
-    'columns[3][search][value]': '',
-    'columns[3][search][regex]': 'false',
-    'columns[4][data]': 'RelativeSize',
-    'columns[4][name]': 'RS',
-    'columns[4][searchable]': 'true',
-    'columns[4][orderable]': 'false',
-    'columns[4][search][value]': '',
-    'columns[4][search][regex]': 'false',
-    'columns[5][data]': 'CumulativeDistribution',
-    'columns[5][name]': 'PCT',
-    'columns[5][searchable]': 'true',
-    'columns[5][orderable]': 'false',
-    'columns[5][search][value]': '',
-    'columns[5][search][regex]': 'false',
-    'columns[6][data]': 'TradeLevelRank',
-    'columns[6][name]': 'Rank',
-    'columns[6][searchable]': 'true',
-    'columns[6][orderable]': 'false',
-    'columns[6][search][value]': '',
-    'columns[6][search][regex]': 'false',
-    'columns[7][data]': 'Dates',
-    'columns[7][name]': 'Dates',
-    'columns[7][searchable]': 'true',
-    'columns[7][orderable]': 'false',
-    'columns[7][search][value]': '',
-    'columns[7][search][regex]': 'false',
-    'start': '0',
-    'length': '-1',
-    'search[value]': '',
-    'search[regex]': 'false',
-    'StartDate': '2025-06-08',
-    'EndDate': '2026-06-08',
-    'Ticker': 'CRDU',
-    'Levels': '5'
+    StartDateKey: '20250608',
+    EndDateKey: '20260608',
+    Ticker: 'CRDU',
+    Levels: 5
   };
 
-  assert.equal(String(levelRequest.url), 'https://www.volumeleaders.com/Chart0/GetTradeLevels');
-  assert.equal(levelRequest.options.headers['Content-Type'], 'application/x-www-form-urlencoded; charset=UTF-8');
+  assert.equal(String(levelRequest.url), 'https://www.volumeleaders.com/Chart0/GetChartTradeLevels');
+  assert.equal(levelRequest.options.headers['Content-Type'], 'application/json');
   assert.equal(levelRequest.options.headers.Accept, 'application/json, text/javascript, */*; q=0.01');
   assert.equal(levelRequest.options.headers.Origin, 'https://www.volumeleaders.com');
   assert.equal(levelRequest.options.headers.Referer, 'https://www.volumeleaders.com/Chart0?StartDate=2025-06-08&EndDate=2026-06-08&Ticker=CRDU&MinVolume=0&MaxVolume=2000000000&MinDollars=500000&MaxDollars=30000000000&MinPrice=0&MaxPrice=100000&DarkPools=-1&Sweeps=-1&LatePrints=-1&SignaturePrints=-1&VolumeProfile=0&Levels=5&TradeCount=3&VCD=0&TradeRank=-1&TradeRankSnapshot=-1&IncludePremarket=1&IncludeRTH=1&IncludeAH=1&IncludeOpening=1&IncludeClosing=1&IncludePhantom=1&IncludeOffsetting=1');
   assert.deepEqual(body, expectedBody);
   assert.equal(result.levels[0].price, 36.8);
+});
+
+test('levels and trades fetch even when the auth cookie lookup is false', async () => {
+  const context = loadBackground({ cookies: [], yearRange: 1 });
+
+  assert.equal((await context.checkVlAuth()).authenticated, false);
+  const levels = await context.fetchVlLevels('CRDU', new Date('2026-06-08T12:00:00Z'));
+  const trades = await context.fetchVlTrades('CRDU', 5, null, new Date('2026-06-08T12:00:00Z'));
+
+  assert.equal(levels.success, true);
+  assert.equal(trades.success, true);
+  assert.ok(context.fetchCalls.some(call => String(call.url).endsWith('/Chart0/GetChartTradeLevels')));
+  assert.ok(context.fetchCalls.some(call => String(call.url).endsWith('/Chart0/GetAllPriceVolumeTradeData')));
+  assert.ok(context.fetchCalls.filter(call => String(call.url).includes('/Chart0/')).every(call => call.options.credentials === 'include'));
+});
+
+test('level and trade fetches report authentication status and login redirects', async () => {
+  const responses = [
+    { ok: false, status: 401 },
+    { ok: false, status: 403 },
+    { ok: true, status: 200, url: 'https://www.volumeleaders.com/Account/Login?ReturnUrl=%2FChart0' }
+  ];
+
+  for (const response of responses) {
+    const context = loadBackground({ levelResponse: response, tradeResponse: response });
+    const now = new Date('2026-06-08T12:00:00Z');
+
+    await assert.rejects(context.fetchVlLevels('CRDU', now), /session expired/i);
+    await assert.rejects(context.fetchVlTrades('CRDU', 5, null, now), /session expired/i);
+  }
+});
+
+test('malformed level and trade response shapes are not reported as empty results', async () => {
+  const context = loadBackground({
+    levelResponse: { body: { data: [] } },
+    tradeResponse: { body: [] }
+  });
+  const now = new Date('2026-06-08T12:00:00Z');
+
+  await assert.rejects(context.fetchVlLevels('CRDU', now), /Invalid VL levels response/);
+  await assert.rejects(context.fetchVlTrades('CRDU', 5, null, now), /Invalid VL trades response/);
 });
 
 test('levels parse MinDate and propagate the earliest clustered anchor to drawing', async () => {

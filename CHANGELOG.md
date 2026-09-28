@@ -3,6 +3,17 @@
 All notable changes to VL-TV Bridge.
 
 
+## [1.9.0](///compare/v1.8.8...v1.9.0) (2026-09-28)
+
+### Features
+
+* **levels:** anchor trade level rays to first-trade date 47e884a
+
+### Bug Fixes
+
+* match VolumeLeaders chart levels API fbd6ff0
+* **popup:** avoid blocking on unverified VL cookie b035b95
+
 ## [1.8.8](///compare/v1.8.7...v1.8.8) (2026-07-01)
 
 ### Features

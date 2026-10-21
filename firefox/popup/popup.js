@@ -32,43 +32,32 @@ const DEFAULTS = {
  * write a stored value back into the control, and save changes to storage.
  * This replaces the old pile of near-identical change handlers.
  *
- * `color` settings also carry `swatchId`/`panelId`/`label`, used to build a custom
- * in-popup color picker (see createColorPicker) instead of a native <input type="color">.
+ * `color` settings also carry `swatchId` (the decorative color swatch) and `errorId`
+ * (the message shown for an invalid hex code), both next to their hex text input.
  */
 const SETTINGS = [
   { key: 'levelCount', group: 'levels', type: 'radio', name: 'levelCount', parse: toInt },
   { key: 'yearRange', group: 'levels', type: 'select', id: 'year-range-select', parse: toInt },
   { key: 'showDates', group: 'levels', type: 'switch', id: 'show-dates-toggle' },
   {
-    key: 'lineColor', group: 'levels', type: 'color', id: 'line-color-input', hexId: 'line-color-hex',
-    swatchId: 'line-color-swatch', panelId: 'line-color-panel', label: 'level line color',
-    onChange: updateLinePreview
+    key: 'lineColor', group: 'levels', type: 'color', id: 'line-color-input',
+    swatchId: 'line-color-swatch', errorId: 'line-color-error', onChange: updateLinePreview
   },
   { key: 'lineThickness', group: 'levels', type: 'range', id: 'line-thickness-range', valueId: 'line-thickness-value', suffix: ' px', parse: toInt, onChange: updateLinePreview },
   { key: 'lineOpacity', group: 'levels', type: 'radio', name: 'lineOpacity', parse: toInt, onChange: updateLinePreview },
   { key: 'tradeCount', group: 'trades', type: 'radio', name: 'tradeCount', parse: toInt },
   {
-    key: 'tradeLitColor', group: 'trades', type: 'color', id: 'trade-lit-color-input', hexId: 'trade-lit-color-hex',
-    swatchId: 'trade-lit-color-swatch', panelId: 'trade-lit-color-panel', label: 'lit trade color'
+    key: 'tradeLitColor', group: 'trades', type: 'color', id: 'trade-lit-color-input',
+    swatchId: 'trade-lit-color-swatch', errorId: 'trade-lit-color-error'
   },
   {
-    key: 'tradeDarkPoolColor', group: 'trades', type: 'color', id: 'trade-dark-pool-color-input', hexId: 'trade-dark-pool-color-hex',
-    swatchId: 'trade-dark-pool-color-swatch', panelId: 'trade-dark-pool-color-panel', label: 'dark pool trade color'
+    key: 'tradeDarkPoolColor', group: 'trades', type: 'color', id: 'trade-dark-pool-color-input',
+    swatchId: 'trade-dark-pool-color-swatch', errorId: 'trade-dark-pool-color-error'
   },
   { key: 'tradeThickness', group: 'trades', type: 'range', id: 'trade-thickness-range', valueId: 'trade-thickness-value', suffix: ' px', parse: toInt },
   { key: 'showOriginalTradeRank', group: 'trades', type: 'switch', id: 'show-original-trade-rank-toggle' },
   { key: 'tradeLabelPosition', group: 'trades', type: 'radio', name: 'tradeLabelPosition' },
   { key: 'debugMode', group: 'more', type: 'switch', id: 'debug-toggle', onChange: sendDebugMode }
-];
-
-/**
- * Preset swatches shown in every color picker panel: the three stored defaults
- * plus a small TradingView-like palette, so common colors are one click away.
- */
-const PRESET_COLORS = [
-  '#2962FF', '#92CBF9', '#F4A460', '#F23645', '#089981', '#FF9800',
-  '#FFEB3B', '#9C27B0', '#00BCD4', '#E91E63', '#4CAF50', '#3F51B5',
-  '#795548', '#FFFFFF', '#000000'
 ];
 
 /** Parses an integer, falling back to NaN (caller supplies the real default). */
@@ -140,8 +129,7 @@ function applySetting(setting, value) {
     case 'color': {
       const normalized = normalizeHexOrDefault(resolved, DEFAULTS[setting.key]);
       document.getElementById(setting.id).value = normalized;
-      document.getElementById(setting.hexId).textContent = normalized;
-      colorPickers[setting.id]?.setColor(normalized);
+      showColorValue(setting, normalized);
       break;
     }
     case 'range': {
@@ -156,8 +144,7 @@ function applySetting(setting, value) {
 
 /**
  * Saves a setting's current control value to storage and runs its onChange hook.
- * Not used for 'color' settings: those save through scheduleColorSave instead, so
- * drags can apply live without writing to storage on every pointer move.
+ * Color settings use it too; their input handler calls it once the hex code is valid.
  */
 async function saveSetting(setting) {
   const value = readSetting(setting);
@@ -187,307 +174,61 @@ function wireSetting(setting) {
       document.getElementById(setting.id).addEventListener('input', save);
       break;
     case 'color':
-      // Wired separately by setupColorPickers(); the picker calls scheduleColorSave
-      // directly so drag updates can apply live without saving on every pointer move.
+      wireColorInput(setting);
       break;
     default:
       break;
   }
 }
 
-/** Every live color picker instance, keyed by its setting's hidden input id. */
-const colorPickers = {};
-
-/** Pending debounced storage writes for color settings, keyed by setting.key. */
-const pendingColorSaves = new Map();
-
 /**
- * Saves a color setting's value to storage. While dragging (not `committing`),
- * writes are debounced by ~150ms so a pointer drag does not spam storage.local.
- * On commit (pointerup, Enter, Done, preset click) the write happens right away.
+ * Wires a hex text input. A valid code applies live and saves. Invalid text is
+ * flagged but never saved. On blur, the text snaps back to the last saved color.
  */
-function scheduleColorSave(setting, hex, committing) {
-  const pending = pendingColorSaves.get(setting.key);
-  if (pending) {
-    clearTimeout(pending);
-    pendingColorSaves.delete(setting.key);
-  }
-  if (committing) {
-    browser.storage.local.set({ [setting.key]: hex });
-    return;
-  }
-  const timer = setTimeout(() => {
-    pendingColorSaves.delete(setting.key);
-    browser.storage.local.set({ [setting.key]: hex });
-  }, 150);
-  pendingColorSaves.set(setting.key, timer);
-}
-
-/**
- * Creates a self-contained color picker UI inside `panelEl`, opened by clicking
- * `swatchEl`. This replaces native <input type="color">, which on Linux opens the
- * GTK system color dialog and steals focus from the popup, closing it before a
- * color can be picked. Everything here lives inside the popup's own DOM instead.
- *
- * `onChange(hex, { committing })` fires on every color change. `committing` is
- * false during a drag or while typing, and true when the change should be
- * treated as final (pointerup, Enter, Done, or a preset click).
- */
-function createColorPicker({ swatchEl, hexLabelEl, panelEl, label, initial, onChange }) {
-  let hex = normalizeHexOrDefault(initial, '#000000');
-  let hsv = hexToHsv(hex);
-  let isOpen = false;
-
-  const svSquare = document.createElement('div');
-  svSquare.className = 'sv-square';
-  svSquare.tabIndex = 0;
-  svSquare.setAttribute('role', 'slider');
-  svSquare.setAttribute('aria-label', `${label} saturation and brightness`);
-  svSquare.setAttribute('aria-valuemin', '0');
-  svSquare.setAttribute('aria-valuemax', '100');
-
-  const svThumb = document.createElement('div');
-  svThumb.className = 'sv-thumb';
-  svSquare.appendChild(svThumb);
-
-  const hueRange = document.createElement('input');
-  hueRange.type = 'range';
-  hueRange.min = '0';
-  hueRange.max = '359';
-  hueRange.className = 'hue-range';
-  hueRange.setAttribute('aria-label', `${label} hue`);
-
-  const presetRow = document.createElement('div');
-  presetRow.className = 'preset-row';
-  const presetButtons = PRESET_COLORS.map((presetHex) => {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'preset-swatch';
-    btn.style.backgroundColor = presetHex;
-    btn.dataset.hex = presetHex;
-    btn.setAttribute('aria-label', `Use color ${presetHex}`);
-    presetRow.appendChild(btn);
-    return btn;
-  });
-
-  const hexRow = document.createElement('div');
-  hexRow.className = 'hex-input-row';
-  const hexInput = document.createElement('input');
-  hexInput.type = 'text';
-  hexInput.className = 'hex-input';
-  hexInput.maxLength = 7;
-  hexInput.placeholder = '#RRGGBB';
-  hexInput.setAttribute('aria-label', `${label} hex value`);
-  const doneBtn = document.createElement('button');
-  doneBtn.type = 'button';
-  doneBtn.className = 'btn text picker-done';
-  doneBtn.textContent = 'Done';
-  hexRow.append(hexInput, doneBtn);
-
-  const hexError = document.createElement('div');
-  hexError.className = 'hex-error hidden';
-  hexError.textContent = 'Enter 6 hex digits, like 2962FF';
-  hexError.setAttribute('role', 'alert');
-
-  panelEl.append(svSquare, hueRange, presetRow, hexRow, hexError);
-
-  /** Shows or hides the "invalid hex" error message and marks the hex input accordingly. */
-  function setHexError(show) {
-    hexError.classList.toggle('hidden', !show);
-    hexInput.classList.toggle('invalid', show);
-  }
-
-  /** Syncs every visual (swatch, hex label, sv thumb, hue slider, presets, hex input) to current state. */
-  function renderVisuals() {
-    swatchEl.style.setProperty('--swatch-color', hex);
-    swatchEl.setAttribute('aria-label', `Change ${label}, current ${hex}`);
-    hexLabelEl.textContent = hex;
-    svSquare.style.setProperty('--hue', String(hsv.h));
-    svSquare.setAttribute('aria-valuetext', `Saturation ${Math.round(hsv.s * 100)}%, brightness ${Math.round(hsv.v * 100)}%`);
-    svThumb.style.left = `${hsv.s * 100}%`;
-    svThumb.style.top = `${(1 - hsv.v) * 100}%`;
-    hueRange.value = String(Math.round(hsv.h));
-    presetButtons.forEach((btn) => {
-      btn.classList.toggle('selected', btn.dataset.hex === hex);
-    });
-    if (document.activeElement !== hexInput) {
-      hexInput.value = hex;
-    }
-    setHexError(false);
-  }
-
-  /** Recomputes the hex from the current HSV state, updates visuals, and notifies the caller. */
-  function commitHsv(committing) {
-    hex = hsvToHex(hsv.h, hsv.s, hsv.v);
-    renderVisuals();
-    onChange(hex, { committing });
-  }
-
-  /** Reads a pointer position within the sv square and updates saturation/value. */
-  function setFromPoint(clientX, clientY, committing) {
-    const rect = svSquare.getBoundingClientRect();
-    const s = rect.width === 0 ? hsv.s : clamp((clientX - rect.left) / rect.width, 0, 1);
-    const v = rect.height === 0 ? hsv.v : clamp(1 - (clientY - rect.top) / rect.height, 0, 1);
-    hsv = { ...hsv, s, v };
-    commitHsv(committing);
-  }
-
-  svSquare.addEventListener('pointerdown', (event) => {
-    svSquare.setPointerCapture(event.pointerId);
-    setFromPoint(event.clientX, event.clientY, false);
-  });
-  svSquare.addEventListener('pointermove', (event) => {
-    if (event.buttons !== 1) return;
-    setFromPoint(event.clientX, event.clientY, false);
-  });
-  svSquare.addEventListener('pointerup', (event) => {
-    setFromPoint(event.clientX, event.clientY, true);
-  });
-  svSquare.addEventListener('keydown', (event) => {
-    const step = event.shiftKey ? 0.1 : 0.02;
-    let handled = true;
-    if (event.key === 'ArrowLeft') hsv = { ...hsv, s: clamp(hsv.s - step, 0, 1) };
-    else if (event.key === 'ArrowRight') hsv = { ...hsv, s: clamp(hsv.s + step, 0, 1) };
-    else if (event.key === 'ArrowUp') hsv = { ...hsv, v: clamp(hsv.v + step, 0, 1) };
-    else if (event.key === 'ArrowDown') hsv = { ...hsv, v: clamp(hsv.v - step, 0, 1) };
-    else handled = false;
-    if (handled) {
-      event.preventDefault();
-      commitHsv(true);
-    }
-  });
-
-  hueRange.addEventListener('input', () => {
-    hsv = { ...hsv, h: toInt(hueRange.value) };
-    commitHsv(false);
-  });
-  hueRange.addEventListener('change', () => {
-    hsv = { ...hsv, h: toInt(hueRange.value) };
-    commitHsv(true);
-  });
-
-  presetButtons.forEach((btn) => {
-    btn.addEventListener('click', () => {
-      hsv = hexToHsv(btn.dataset.hex);
-      commitHsv(true);
-    });
-  });
-
-  /** Validates and applies the hex input's current text, showing an error instead of saving if invalid. */
-  function applyHexInput(committing) {
-    const raw = hexInput.value.trim();
-    if (raw === '') return;
-    const candidate = normalizeHexOrDefault(raw, '');
-    if (!candidate) {
-      setHexError(true);
+function wireColorInput(setting) {
+  const input = document.getElementById(setting.id);
+  input.addEventListener('input', () => {
+    const hex = normalizeHexOrDefault(input.value, null);
+    if (hex) {
+      showColorValue(setting, hex);
+      saveSetting(setting);
       return;
     }
-    hsv = hexToHsv(candidate);
-    commitHsv(committing);
-  }
-
-  hexInput.addEventListener('input', () => applyHexInput(false));
-  hexInput.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      applyHexInput(true);
-    }
-  });
-  doneBtn.addEventListener('click', () => {
-    if (hexInput.value.trim() !== '') {
-      applyHexInput(true);
-    }
-    close();
-  });
-
-  panelEl.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      close();
-      swatchEl.focus();
-    }
-  });
-
-  /** Opens this picker's panel, closing any other open picker first. */
-  function open() {
-    Object.values(colorPickers).forEach((other) => {
-      if (other !== picker && other.isOpen()) other.close();
-    });
-    panelEl.classList.remove('hidden');
-    swatchEl.setAttribute('aria-expanded', 'true');
-    isOpen = true;
-    renderVisuals();
-  }
-
-  /** Closes this picker's panel. */
-  function close() {
-    panelEl.classList.add('hidden');
-    swatchEl.setAttribute('aria-expanded', 'false');
-    isOpen = false;
-  }
-
-  swatchEl.addEventListener('click', () => {
-    if (isOpen) {
-      close();
-      swatchEl.focus();
+    // Only flag the error once the text is as long as a full code, like #2962FF,
+    // so the field does not turn red while the user is still typing.
+    if (input.value.trim().length >= 7) {
+      flagColorError(setting);
     } else {
-      open();
+      clearColorError(setting);
     }
   });
-
-  const picker = {
-    /** Updates the picker to show `newHex` without firing onChange (used when loading/resetting settings). */
-    setColor(newHex) {
-      hex = normalizeHexOrDefault(newHex, hex);
-      hsv = hexToHsv(hex);
-      renderVisuals();
-    },
-    getColor: () => hex,
-    isOpen: () => isOpen,
-    close
-  };
-
-  renderVisuals();
-  return picker;
+  input.addEventListener('blur', () => {
+    const hex = normalizeHexOrDefault(input.value, input.dataset.savedHex);
+    input.value = hex;
+    showColorValue(setting, hex);
+  });
 }
 
-/** Closes any open color picker panel when a click lands outside every swatch/panel. */
-document.addEventListener('click', (event) => {
-  Object.entries(colorPickers).forEach(([, picker]) => {
-    if (!picker.isOpen()) return;
-    if (picker.panelEl?.contains(event.target) || picker.swatchEl?.contains(event.target)) return;
-    picker.close();
-  });
-});
-
 /**
- * Builds one custom color picker per 'color' setting in SETTINGS, replacing the
- * native color inputs. Must run before loadSettings() so applySetting can sync
- * each picker's visuals to the stored value.
+ * Shows a valid color in a color setting's swatch and remembers it as the last
+ * saved value, so a bad edit can revert to it on blur.
  */
-function setupColorPickers() {
-  SETTINGS.filter((setting) => setting.type === 'color').forEach((setting) => {
-    const swatchEl = document.getElementById(setting.swatchId);
-    const hexLabelEl = document.getElementById(setting.hexId);
-    const panelEl = document.getElementById(setting.panelId);
-    const hiddenInput = document.getElementById(setting.id);
+function showColorValue(setting, hex) {
+  document.getElementById(setting.id).dataset.savedHex = hex;
+  document.getElementById(setting.swatchId).style.backgroundColor = hex;
+  clearColorError(setting);
+}
 
-    const picker = createColorPicker({
-      swatchEl,
-      hexLabelEl,
-      panelEl,
-      label: setting.label,
-      initial: hiddenInput.value,
-      onChange: (hex, meta) => {
-        hiddenInput.value = hex;
-        if (setting.onChange) setting.onChange(hex);
-        scheduleColorSave(setting, hex, meta.committing);
-      }
-    });
-    picker.swatchEl = swatchEl;
-    picker.panelEl = panelEl;
-    colorPickers[setting.id] = picker;
-  });
+/** Clears the invalid state and hides the error message for a color input. */
+function clearColorError(setting) {
+  document.getElementById(setting.id).removeAttribute('aria-invalid');
+  document.getElementById(setting.errorId).classList.add('hidden');
+}
+
+/** Marks a color input as invalid and shows its error message. */
+function flagColorError(setting) {
+  document.getElementById(setting.id).setAttribute('aria-invalid', 'true');
+  document.getElementById(setting.errorId).classList.remove('hidden');
 }
 
 /** Sends the current debug mode to the background script. */
@@ -562,6 +303,11 @@ async function init() {
   const manifest = browser.runtime.getManifest();
   elements.version.textContent = `v${manifest.version}`;
 
+  // Load settings first so controls and swatches show saved values right away,
+  // even while the slower TradingView and VL checks are still running.
+  await loadSettings();
+  await restoreCustomizeState();
+
   const tabs = await browser.tabs.query({ active: true, currentWindow: true });
   currentTabId = tabs[0]?.id;
 
@@ -570,9 +316,6 @@ async function init() {
     checkVlAuth()
   ]);
 
-  setupColorPickers();
-  await loadSettings();
-  await restoreCustomizeState();
   setupEventListeners();
   updateButtonStates();
 }

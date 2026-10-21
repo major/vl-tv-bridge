@@ -179,34 +179,6 @@
     };
   }
 
-  /** Build the point, shape config, and original result fields for a zone. */
-  function buildZoneDefinition(data) {
-    const { highPrice, lowPrice, midPrice, timestamp, label, options = {} } = data;
-    const hasValidTimestamp = Number.isFinite(timestamp) && timestamp > 0;
-    const linecolor = applyOpacity(options.linecolor || '#02A9DE', options.lineopacity ?? 100);
-    const overrides = {
-      linecolor,
-      linewidth: options.linewidth || 4,
-      linestyle: options.linestyle || 0,
-      showLabel: true,
-      textcolor: options.textcolor || linecolor,
-      fontsize: options.fontsize || 12,
-      bold: options.bold !== false,
-      horzLabelsAlign: 'right',
-      vertLabelsAlign: 'top'
-    };
-    const point = hasValidTimestamp ? { price: midPrice, time: timestamp } : { price: midPrice };
-    return {
-      point,
-      config: {
-        shape: hasValidTimestamp ? 'horizontal_ray' : 'horizontal_line',
-        text: label || `VL Zone [${lowPrice.toFixed(2)}-${highPrice.toFixed(2)}]`,
-        overrides
-      },
-      result: { highPrice, lowPrice, midPrice }
-    };
-  }
-
   /** Build a trade definition, including the existing rank and visibility skips. */
   function buildTradeDefinition(data, visibleRange) {
     const { price, timestamp, rank, originalRank, darkPool, sweep, dollarVolume, options = {} } = data;
@@ -306,38 +278,6 @@
         console.error('🔍 Could not inspect chart:', e);
       }
 
-      throw err;
-    }
-  }
-
-  /**
-   * Draw a zone (clustered levels) as a thick horizontal line at the midpoint
-   */
-  async function drawZone(data) {
-    const chart = getChartApi();
-    if (!chart) {
-      const error = 'TradingView chart API not available';
-      console.error('❌', error);
-      throw new Error(error);
-    }
-    const definition = buildZoneDefinition(data);
-    const { highPrice, lowPrice, midPrice } = data;
-    console.log('🎨 INJECTED: Zone overrides:', JSON.stringify(definition.config.overrides));
-    console.log(`📐 INJECTED: Creating zone at $${midPrice.toFixed(2)} (range: $${lowPrice.toFixed(2)}-$${highPrice.toFixed(2)}) with label "${definition.config.text}"`);
-
-    try {
-      const shapeId = await chart.createShape(definition.point, definition.config);
-
-      if (!shapeId) {
-        console.warn('⚠️ createShape returned falsy value:', shapeId);
-        throw new Error('createShape returned no ID');
-      }
-
-      console.log(`✅ Drew zone at $${midPrice.toFixed(2)}, ID: ${shapeId}`);
-      return { shapeId, ...definition.result };
-    } catch (err) {
-      console.error('❌ Failed to draw zone at', midPrice);
-      console.error('❌ Error:', err.message || err);
       throw err;
     }
   }
@@ -494,7 +434,7 @@
 
       for (const shape of allShapes) {
         try {
-          // Target level/zone lines and rays, but leave trade rays intact.
+          // Target level lines and rays, but leave trade rays intact.
           if (shape.name !== 'horizontal_line' && shape.name !== 'horizontal_ray') continue;
 
           // Get shape properties to check the text
@@ -641,24 +581,12 @@
     });
   }
 
-  /** Build the identity key used to track a desired level, zone, or trade. */
+  /** Build the identity key used to track a desired level or trade. */
   function drawingIdentity(kind, item) {
     if (kind === 'trades') {
       return JSON.stringify(['trade', item.price, item.timestamp, Boolean(item.darkPool), Boolean(item.sweep)]);
     }
-    if (item.type === 'level') {
-      return JSON.stringify(['level', item.price, normalizedTimestamp(item.timestamp)]);
-    }
-    const members = (item.levels || []).map(level => [level.price, normalizedTimestamp(level.timestamp)]);
-    members.sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
-    return JSON.stringify([
-      'zone',
-      item.lowPrice,
-      item.highPrice,
-      item.midPrice,
-      normalizedTimestamp(item.timestamp),
-      members
-    ]);
+    return JSON.stringify(['level', item.price, normalizedTimestamp(item.timestamp)]);
   }
 
   /** Validate caller data and build every desired definition before chart mutation. */
@@ -694,23 +622,8 @@
           throw new Error(`Level item ${index} has invalid price or timestamp`);
         }
         definition = buildLineDefinition(item);
-      } else if (item.type === 'zone') {
-        if (![item.lowPrice, item.highPrice, item.midPrice].every(Number.isFinite) ||
-            (item.timestamp != null && !Number.isFinite(item.timestamp))) {
-          throw new Error(`Zone item ${index} has invalid bounds or timestamp`);
-        }
-        if (item.levels !== undefined && !Array.isArray(item.levels)) {
-          throw new Error(`Zone item ${index} has malformed levels`);
-        }
-        for (const level of item.levels || []) {
-          if (!level || !Number.isFinite(level.price) ||
-              (level.timestamp != null && !Number.isFinite(level.timestamp))) {
-            throw new Error(`Zone item ${index} has malformed constituent levels`);
-          }
-        }
-        definition = buildZoneDefinition(item);
       } else {
-        throw new Error(`Level item ${index} must have type 'level' or 'zone'`);
+        throw new Error(`Level item ${index} must have type 'level'`);
       }
       return {
         item,
@@ -721,7 +634,10 @@
     });
   }
 
-  /** Return whether an inventory text belongs to a VL level or zone. */
+  /**
+   * Return whether an inventory text belongs to a VL level.
+   * Legacy zone shapes also use the "VL" prefix, so they are still matched and cleaned up.
+   */
   function isVlLevelText(text) {
     return /^VL(?:\s|$)/.test(text);
   }
@@ -1063,10 +979,6 @@
 
         case 'DRAW_LINE':
           result = await drawLine(data);
-          break;
-
-        case 'DRAW_ZONE':
-          result = await drawZone(data);
           break;
 
         case 'DRAW_NOTE':

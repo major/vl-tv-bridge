@@ -117,7 +117,7 @@ function contextResponse(overrides = {}) {
   return { key: '/chart/layout-1/|NASDAQ:AAPL|0', symbol: 'AAPL', ...overrides };
 }
 
-test('levels reconcile normalized lines and zones without issuing bulk clears', async () => {
+test('levels reconcile normalized lines without issuing bulk clears', async () => {
   let reconcileData;
   const harness = createHarness({
     respond: async (command, data) => {
@@ -139,28 +139,19 @@ test('levels reconcile normalized lines and zones without issuing bulk clears', 
     type: 'DRAW_LEVELS',
     symbol: 'NASDAQ:AAPL.US',
     levels: [
-      { type: 'level', price: 10, timestamp: 123, label: 'support' },
-      {
-        type: 'zone', highPrice: 12, lowPrice: 10, midPrice: 11, timestamp: 124,
-        label: 'cluster', levels: [{ price: 10, timestamp: 123 }, { price: 12, timestamp: 124 }]
-      }
+      { type: 'level', price: 10, timestamp: 123, label: 'support' }
     ],
     options: { color: '#123456', width: 3, opacity: 40, style: 2 }
   });
 
   assert.equal(response.success, true);
-  assert.equal(response.drawn, 2);
+  assert.equal(response.drawn, 1);
   assert.equal(response.removed, 1);
   assert.equal(reconcileData.kind, 'levels');
   assert.deepEqual(JSON.parse(JSON.stringify(reconcileData.items)), [
     {
       type: 'level', price: 10, timestamp: 123, label: 'support',
       options: { linecolor: '#123456', linewidth: 3, lineopacity: 40, linestyle: 2 }
-    },
-    {
-      type: 'zone', highPrice: 12, lowPrice: 10, midPrice: 11, timestamp: 124, label: 'cluster',
-      levels: [{ price: 10, timestamp: 123 }, { price: 12, timestamp: 124 }],
-      options: { linecolor: '#123456', linewidth: 4, lineopacity: 40, linestyle: 2 }
     }
   ]);
   assert.equal(harness.commands.some(command => command.command.startsWith('CLEAR_')), false);

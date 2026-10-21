@@ -62,9 +62,6 @@ const elements = {
   showOriginalTradeRankToggle: document.getElementById('show-original-trade-rank-toggle'),
   tradeLabelPositionSelect: document.getElementById('trade-label-position-select'),
   yearRangeSelect: document.getElementById('year-range-select'),
-  clusteringToggle: document.getElementById('clustering-toggle'),
-  thresholdSelect: document.getElementById('threshold-select'),
-  thresholdRow: document.getElementById('threshold-row'),
   lineColorInput: document.getElementById('line-color-input'),
   lineThicknessSelect: document.getElementById('line-thickness-select'),
   lineOpacitySelect: document.getElementById('line-opacity-select'),
@@ -99,7 +96,7 @@ async function init() {
 
   // Load settings
   const stored = await browser.storage.local.get([
-    'debugMode', 'levelCount', 'tradeCount', 'yearRange', 'clusteringEnabled', 'clusterThreshold',
+    'debugMode', 'levelCount', 'tradeCount', 'yearRange',
     'lineColor', 'lineThickness', 'lineOpacity', 'showDates', 'tradeLitColor', 'tradeDarkPoolColor', 'tradeThickness',
     'showOriginalTradeRank', 'tradeLabelPosition'
   ]);
@@ -111,14 +108,11 @@ async function init() {
   elements.tradeThicknessSelect.value = stored.tradeThickness ?? 1;
   elements.showOriginalTradeRankToggle.checked = stored.showOriginalTradeRank || false;
   elements.yearRangeSelect.value = stored.yearRange ?? 5;
-  elements.clusteringToggle.checked = stored.clusteringEnabled !== false; // Default true
-  elements.thresholdSelect.value = stored.clusterThreshold ?? 1.0;
   elements.lineColorInput.value = stored.lineColor ?? '#2962FF';
   elements.lineThicknessSelect.value = stored.lineThickness ?? 2;
   elements.lineOpacitySelect.value = stored.lineOpacity ?? 100;
   elements.showDatesToggle.checked = stored.showDates || false; // Default false
   elements.tradeLabelPositionSelect.value = stored.tradeLabelPosition || 'right';
-  updateThresholdVisibility();
 
   // Set up event listeners
   setupEventListeners();
@@ -466,25 +460,6 @@ async function handleYearRangeChange() {
 }
 
 /**
- * Handle clustering toggle change
- */
-async function handleClusteringToggle() {
-  const enabled = elements.clusteringToggle.checked;
-  await browser.storage.local.set({ clusteringEnabled: enabled });
-  updateThresholdVisibility();
-  console.log('⚙️ Clustering enabled:', enabled);
-}
-
-/**
- * Handle cluster threshold selection change
- */
-async function handleThresholdChange() {
-  const threshold = parseFloat(elements.thresholdSelect.value);
-  await browser.storage.local.set({ clusterThreshold: threshold });
-  console.log('⚙️ Cluster threshold set to:', threshold + '%');
-}
-
-/**
  * Handle line color change
  */
 async function handleLineColorChange() {
@@ -530,16 +505,6 @@ async function handleShowDatesToggle() {
 }
 
 /**
- * Update threshold row visibility based on clustering toggle
- */
-function updateThresholdVisibility() {
-  elements.thresholdRow.style.display =
-    elements.clusteringToggle.checked ? 'flex' : 'none';
-}
-
-
-
-/**
  * Set up event listeners
  */
 function setupEventListeners() {
@@ -553,8 +518,6 @@ function setupEventListeners() {
   elements.levelCountSelect.addEventListener('change', handleLevelCountChange);
   elements.tradeCountSelect.addEventListener('change', handleTradeCountChange);
   elements.yearRangeSelect.addEventListener('change', handleYearRangeChange);
-  elements.clusteringToggle.addEventListener('change', handleClusteringToggle);
-  elements.thresholdSelect.addEventListener('change', handleThresholdChange);
   elements.lineColorInput.addEventListener('input', handleLineColorChange);
   elements.lineThicknessSelect.addEventListener('change', handleLineThicknessChange);
   elements.lineOpacitySelect.addEventListener('change', handleLineOpacityChange);

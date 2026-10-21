@@ -358,10 +358,9 @@ test('malformed level and trade response shapes are not reported as empty result
   await assert.rejects(context.fetchVlTrades('CRDU', 5, null, now), /Invalid VL trades response/);
 });
 
-test('levels parse MinDate and propagate the earliest clustered anchor to drawing', async () => {
+test('levels parse MinDate and pass each timestamp to drawing as its own level', async () => {
+  // Arrange: three levels with MinDate in different formats, one unparseable
   const context = loadBackground({
-    clusteringEnabled: true,
-    clusterThreshold: 1,
     levelsData: [
       { Price: 100, TradeLevelRank: 1, Dollars: 1000000, Dates: '2026-05-19 - 2026-05-19', MinDate: '/Date(1779148800000)/' },
       { Price: 100.5, TradeLevelRank: 2, Dollars: 1000000, Dates: '2026-05-20 - 2026-05-20', MinDate: 1779062400 },
@@ -369,14 +368,15 @@ test('levels parse MinDate and propagate the earliest clustered anchor to drawin
     ]
   });
 
+  // Act: fetch parses MinDate, then draw sends the levels to the tab
   const levels = await context.fetchVlLevels('CRDU', new Date('2026-06-08T12:00:00Z'));
-  assert.deepEqual(levels.levels.map(level => level.timestamp), [1779148800, 1779062400, null]);
-
   await context.fetchAndDraw('CRDU', 123);
+
+  // Assert: parsed timestamps reach the draw message as type 'level', one per input level
+  assert.deepEqual(levels.levels.map(level => level.timestamp), [1779148800, 1779062400, null]);
   const drawMessage = context.tabMessages.find(entry => entry.message.type === 'DRAW_LEVELS').message;
-  assert.equal(drawMessage.levels[0].type, 'zone');
-  assert.equal(drawMessage.levels[0].timestamp, 1779062400);
-  assert.equal(drawMessage.levels[1].timestamp, null);
+  assert.deepEqual(drawMessage.levels.map(level => level.type), ['level', 'level', 'level']);
+  assert.deepEqual(drawMessage.levels.map(level => level.timestamp), [1779148800, 1779062400, null]);
 });
 
 test('successful empty level and trade results are sent to the tab with the requested symbol', async () => {

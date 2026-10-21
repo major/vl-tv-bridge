@@ -208,18 +208,16 @@ test('levels and trades reconcile separately and preserve unrelated shapes', asy
   assert.equal(state.entries.has('manual'), true);
 });
 
-test('zone identity changes when constituent membership changes', async () => {
+test('reconciliation rejects non-level items before mutation', async () => {
   const state = createChart();
   const injected = loadInjected(state);
   const context = await getContext(injected);
-  /** Build a zone whose constituent membership can be varied. */
-  const zone = levels => ({ type: 'zone', highPrice: 12, lowPrice: 8, midPrice: 10, timestamp: 100, levels, label: 'VL Zone' });
-  const first = await reconcile(injected, context, 'levels', [zone([{ price: 8, timestamp: 90 }, { price: 12, timestamp: 95 }])], []);
-  const second = await reconcile(injected, context, 'levels', [zone([{ price: 8, timestamp: 90 }, { price: 11, timestamp: 95 }, { price: 12, timestamp: 95 }])], first.result.records);
+  const zone = { type: 'zone', highPrice: 12, lowPrice: 8, midPrice: 10, timestamp: 100, label: 'VL Zone' };
+  const response = await reconcile(injected, context, 'levels', [zone], []);
 
-  assert.equal(second.result.success, true);
-  assert.notEqual(second.result.records[0].shapeId, first.result.records[0].shapeId);
-  assert.deepEqual(state.calls.removed, [first.result.records[0].shapeId]);
+  assert.match(response.error, /must have type 'level'/);
+  assert.equal(state.calls.created.length, 0);
+  assert.equal(state.calls.removed.length, 0);
 });
 
 test('records preserve requested times and actual snapped points across VM sessions', async () => {

@@ -76,7 +76,7 @@ test('DRAW_LINE applies configured opacity to level color', async () => {
   assert.equal(createShapeCalls[0].config.overrides.textcolor, 'rgba(17, 34, 51, 0.5)');
 });
 
-test('DRAW_LINE and DRAW_ZONE create rays from valid timestamps and lines otherwise', async () => {
+test('DRAW_LINE creates rays from valid timestamps and lines otherwise', async () => {
   const createShapeCalls = [];
   const chart = {
     createShape(point, config) {
@@ -87,7 +87,7 @@ test('DRAW_LINE and DRAW_ZONE create rays from valid timestamps and lines otherw
   const injected = loadInjected(chart);
 
   await injected.send('DRAW_LINE', { price: 100, timestamp: 1712345678, label: 'VL #1' });
-  await injected.send('DRAW_ZONE', { highPrice: 101, lowPrice: 99, midPrice: 100, timestamp: null, label: 'VL #1,2' });
+  await injected.send('DRAW_LINE', { price: 100, timestamp: null, label: 'VL #1,2' });
 
   assert.deepEqual(plain(createShapeCalls[0].point), { price: 100, time: 1712345678 });
   assert.equal(createShapeCalls[0].config.shape, 'horizontal_ray');

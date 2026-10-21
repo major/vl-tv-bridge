@@ -58,7 +58,7 @@ if (window !== window.top) {
       case 'DRAW_LEVELS':
         queueDrawingOperation(() => drawLevels(message.levels, message.options, message.symbol))
           .then(sendResponse)
-          .catch(err => sendResponse({ success: false, drawn: 0, failed: 0, zones: 0, levels: 0, results: [], error: err.message }));
+          .catch(err => sendResponse({ success: false, drawn: 0, failed: 0, levels: 0, results: [], error: err.message }));
         return true;
 
       case 'CLEAR_DRAWN':
@@ -301,7 +301,7 @@ if (window !== window.top) {
    * @returns {Object} The levels response contract with zero counts.
    */
   function failedLevelsResponse(error, failed = 0) {
-    return { success: false, drawn: 0, failed, zones: 0, levels: 0, results: [], removed: 0, error };
+    return { success: false, drawn: 0, failed, levels: 0, results: [], removed: 0, error };
   }
 
   /**
@@ -315,7 +315,7 @@ if (window !== window.top) {
 
   /**
    * Draw or reconcile trade levels in one scoped batch.
-   * @param {Array} levels - Background-provided levels and zones.
+   * @param {Array} levels - Background-provided levels.
    * @param {Object} options - Drawing style options.
    * @param {string} expectedSymbol - Expected symbol, when provided.
    * @returns {Promise<Object>} The levels drawing response.
@@ -323,40 +323,18 @@ if (window !== window.top) {
   async function drawLevels(levels, options = {}, expectedSymbol) {
     if (!Array.isArray(levels)) return failedLevelsResponse('Levels must be an array');
 
-    const items = levels.map(item => {
-      if (item?.type === 'zone') {
-        return {
-          type: 'zone',
-          highPrice: item.highPrice,
-          lowPrice: item.lowPrice,
-          midPrice: item.midPrice,
-          timestamp: item.timestamp,
-          label: item.label,
-          levels: Array.isArray(item.levels)
-            ? item.levels.map(level => ({ price: level.price, timestamp: level.timestamp }))
-            : [],
-          options: {
-            linecolor: options.color || '#02A9DE',
-            linewidth: 4,
-            lineopacity: options.opacity ?? 100,
-            linestyle: options.style || 0
-          }
-        };
+    const items = levels.map(item => ({
+      type: 'level',
+      price: item?.price,
+      timestamp: item?.timestamp,
+      label: item?.label || `VL ${item?.price}`,
+      options: {
+        linecolor: options.color || '#02A9DE',
+        linewidth: options.width || 2,
+        lineopacity: options.opacity ?? 100,
+        linestyle: options.style || 0
       }
-
-      return {
-        type: 'level',
-        price: item?.price,
-        timestamp: item?.timestamp,
-        label: item?.label || `VL ${item?.price}`,
-        options: {
-          linecolor: options.color || '#02A9DE',
-          linewidth: options.width || 2,
-          lineopacity: options.opacity ?? 100,
-          linestyle: options.style || 0
-        }
-      };
-    });
+    }));
 
     try {
       const context = await getDrawingContext(expectedSymbol);
@@ -369,7 +347,6 @@ if (window !== window.top) {
         success: coreResult.success && failed === 0,
         drawn,
         failed,
-        zones: successfulResults.filter(result => result.type === 'zone').length,
         levels: successfulResults.filter(result => result.type === 'level').length,
         results,
         removed: coreResult.removed

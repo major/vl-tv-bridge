@@ -517,33 +517,23 @@ async function fetchAndDraw(symbol, tabId = null, drawOptions = {}) {
   // Step 2: If tabId provided, draw the levels
   if (tabId) {
     try {
-      // Get clustering and display settings
-      const settings = await browser.storage.local.get(['clusteringEnabled', 'clusterThreshold', 'showDates']);
-      const clusteringEnabled = settings.clusteringEnabled !== false; // Default true
-      const threshold = settings.clusterThreshold ?? 1.0;
+      // Get display settings
+      const settings = await browser.storage.local.get(['showDates']);
       const showDates = settings.showDates || false; // Default false
 
-      // Apply clustering if enabled
-      let drawables;
-      if (clusteringEnabled && threshold > 0) {
-        drawables = clusterLevels(fetchResult.levels, threshold);
-        console.log(`🔗 BACKGROUND: Clustered ${fetchResult.levels.length} levels into ${drawables.length} items (threshold: ${threshold}%)`);
-      } else {
-        drawables = fetchResult.levels.map(l => ({ type: 'level', ...l }));
-      }
-
-      // Add appropriate labels to each item
-      const drawablesWithLabels = drawables.map(item => ({
-        ...item,
-        label: item.type === 'zone' ? formatZoneLabel(item, showDates) : formatLevelLabel(item, showDates)
+      // Each level is drawn on its own, with the same fields as before
+      const levelsWithLabels = fetchResult.levels.map(level => ({
+        type: 'level',
+        ...level,
+        label: formatLevelLabel(level, showDates)
       }));
 
-      console.log(`🎨 BACKGROUND: Drawing ${drawablesWithLabels.length} items on tab ${tabId}`);
+      console.log(`🎨 BACKGROUND: Drawing ${levelsWithLabels.length} levels on tab ${tabId}`);
 
       const drawResponse = await browser.tabs.sendMessage(tabId, {
         type: 'DRAW_LEVELS',
         symbol,
-        levels: drawablesWithLabels,
+        levels: levelsWithLabels,
         options: {
           color: drawOptions.color || '#02A9DE',
           width: drawOptions.width || 2,
@@ -556,9 +546,7 @@ async function fetchAndDraw(symbol, tabId = null, drawOptions = {}) {
 
       return {
         ...fetchResult,
-        drawResult: drawResponse,
-        clustered: clusteringEnabled,
-        clusterCount: drawables.filter(d => d.type === 'zone').length
+        drawResult: drawResponse
       };
     } catch (err) {
       console.error('❌ BACKGROUND: Failed to draw levels:', err);
@@ -895,125 +883,6 @@ function formatDollars(amount) {
   if (amount >= 1e6) return `$${(amount / 1e6).toFixed(0)}M`;
   if (amount >= 1e3) return `$${(amount / 1e3).toFixed(0)}K`;
   return `$${amount.toFixed(0)}`;
-}
-
-/**
- * Cluster nearby price levels into zones based on percentage threshold
- *
- * @param {Array} levels - Array of level objects with price property
- * @param {number} thresholdPercent - Clustering threshold (e.g., 1.0 for 1%)
- * @returns {Array} Array of level and zone objects
- */
-function clusterLevels(levels, thresholdPercent) {
-  if (!levels || levels.length === 0) return [];
-  if (thresholdPercent <= 0) {
-    // No clustering - mark all as single levels
-    return levels.map(l => ({ type: 'level', ...l }));
-  }
-
-  // Sort by price ascending
-  const sorted = [...levels].sort((a, b) => a.price - b.price);
-
-  const clusters = [];
-  let currentCluster = [sorted[0]];
-
-  for (let i = 1; i < sorted.length; i++) {
-    const level = sorted[i];
-    const clusterHigh = Math.max(...currentCluster.map(l => l.price));
-
-    // Calculate threshold relative to cluster's high price
-    const threshold = clusterHigh * (thresholdPercent / 100);
-
-    if ((level.price - clusterHigh) <= threshold) {
-      // Level is close enough - add to current cluster
-      currentCluster.push(level);
-    } else {
-      // Level is too far - finalize current cluster, start new one
-      clusters.push(finalizeCluster(currentCluster));
-      currentCluster = [level];
-    }
-  }
-
-  // Don't forget the last cluster
-  clusters.push(finalizeCluster(currentCluster));
-
-  return clusters;
-}
-
-/**
- * Finalize a cluster into either a single level or a zone
- */
-function finalizeCluster(levels) {
-  if (levels.length === 1) {
-    return { type: 'level', ...levels[0] };
-  }
-
-  const prices = levels.map(l => l.price);
-  const ranks = levels.map(l => l.rank).filter(Boolean).sort((a, b) => a - b);
-  const totalDollars = levels.reduce((sum, l) => sum + (l.dollars || 0), 0);
-  const timestamps = levels.map(l => l.timestamp).filter(timestamp => Number.isFinite(timestamp) && timestamp > 0);
-  const highPrice = Math.max(...prices);
-  const lowPrice = Math.min(...prices);
-
-  return {
-    type: 'zone',
-    highPrice,
-    lowPrice,
-    midPrice: (highPrice + lowPrice) / 2,
-    timestamp: timestamps.length > 0 ? Math.min(...timestamps) : null,
-    levels,
-    aggregated: {
-      rankRange: ranks.length > 0 ? [ranks[0], ranks[ranks.length - 1]] : [null, null],
-      totalDollars,
-      levelCount: levels.length,
-      avgDollars: totalDollars / levels.length
-    }
-  };
-}
-
-/**
- * Format zone label for TradingView line
- * e.g., "VL #7, 9, 10 $2.9B"
- * When showDates is true, includes aggregated date range from all levels
- */
-function formatZoneLabel(zone, showDates = false) {
-  const { aggregated, levels } = zone;
-  const parts = ['VL'];
-
-  // List actual ranks from levels (comma-delimited)
-  if (levels && levels.length > 0) {
-    const ranks = levels.map(l => l.rank).filter(Boolean).sort((a, b) => a - b);
-    if (ranks.length > 0) {
-      parts.push(`#${ranks.join(',')}`);
-    }
-  }
-
-  // Total dollar volume
-  if (aggregated.totalDollars > 0) {
-    parts.push(formatDollars(aggregated.totalDollars));
-  }
-
-  let label = parts.join(' ');
-
-  // Add earliest start date if enabled
-  if (showDates && levels && levels.length > 0) {
-    // Find the earliest start date across all levels in the zone
-    const startDates = [];
-    for (const level of levels) {
-      if (level.dates) {
-        const startDate = level.dates.split(' - ')[0];
-        if (startDate) {
-          startDates.push(startDate);
-        }
-      }
-    }
-    if (startDates.length > 0) {
-      startDates.sort();
-      label += ` ${startDates[0]}`;
-    }
-  }
-
-  return label;
 }
 
 /**

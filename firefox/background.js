@@ -270,12 +270,30 @@ function extractSymbolFromUrl(url) {
 }
 
 /**
+ * Tell the popup which fetch step is running so it can show real progress.
+ * Fire and forget: the popup may be closed, so send errors (sync or async)
+ * are swallowed and callers never wait on this.
+ */
+function sendFetchProgress(action, symbol, stage, step, totalSteps) {
+  try {
+    const sending = browser.runtime.sendMessage({ type: 'FETCH_PROGRESS', action, symbol, stage, step, totalSteps });
+    sending?.catch?.(() => {});
+  } catch (_) {
+    // No listener or extension context gone; progress is best effort.
+  }
+}
+
+/**
  * Handle messages from content scripts and popup
  */
 function handleMessage(message, sender, sendResponse) {
   console.log('📨 Message received:', message);
 
   switch (message.type) {
+    case 'FETCH_PROGRESS':
+      // Progress events are sent to the popup, not handled here
+      break;
+
     case 'FETCH_VL_LEVELS':
       // Fetch levels directly from VL API for a specific symbol
       // If tabId is provided, also draw the levels on that tab
@@ -507,7 +525,10 @@ async function fetchVlLevels(ticker, now = new Date()) {
  * This ensures drawing happens even if the popup closes during fetch
  */
 async function fetchAndDraw(symbol, tabId = null, drawOptions = {}) {
+  const totalSteps = tabId ? 2 : 1;
+
   // Step 1: Fetch the levels
+  sendFetchProgress('levels', symbol, 'fetch', 1, totalSteps);
   const fetchResult = await fetchVlLevels(symbol);
 
   if (!fetchResult.success) {
@@ -516,6 +537,7 @@ async function fetchAndDraw(symbol, tabId = null, drawOptions = {}) {
 
   // Step 2: If tabId provided, draw the levels
   if (tabId) {
+    sendFetchProgress('levels', symbol, 'draw', 2, totalSteps);
     try {
       // Get display settings
       const settings = await browser.storage.local.get(['showDates']);
@@ -593,7 +615,7 @@ async function fetchVlTrades(ticker, tradeCount = 10, visibleRange = null, now =
 
   const chartUrl = buildChart0Url(ticker, startDate, endDate, tradeCount);
 
-  // ponytail: use GetAllPriceVolumeTradeData instead of GetTrades —
+  // ponytail: use GetAllPriceVolumeTradeData instead of GetTrades:
   // GetTrades returns wrong DarkPool flags on wide date ranges,
   // GetAllPriceVolumeTradeData array[1] always has correct DarkPoolTrade.
   const requestBody = {
@@ -798,10 +820,16 @@ function buildChart0Url(ticker, startDate, endDate, levels, tradeCount = levels)
   return `https://www.volumeleaders.com/Chart0?${query.toString()}`;
 }
 
+/**
+ * Fetch large trades and optionally draw them as notes on a tab.
+ * Progress steps: range (tab only), fetch, draw (tab only).
+ */
 async function fetchAndDrawTrades(symbol, tabId = null, tradeCount = 5, drawOptions = {}) {
   let visibleRange = null;
+  const totalSteps = tabId ? 3 : 1;
 
   if (tabId) {
+    sendFetchProgress('trades', symbol, 'range', 1, totalSteps);
     try {
       const rangeResponse = await browser.tabs.sendMessage(tabId, { type: 'GET_VISIBLE_RANGE' });
       visibleRange = rangeResponse?.range;
@@ -813,6 +841,7 @@ async function fetchAndDrawTrades(symbol, tabId = null, tradeCount = 5, drawOpti
     }
   }
 
+  sendFetchProgress('trades', symbol, 'fetch', tabId ? 2 : 1, totalSteps);
   const fetchResult = await fetchVlTrades(symbol, tradeCount, visibleRange);
 
   if (!fetchResult.success) {
@@ -820,6 +849,7 @@ async function fetchAndDrawTrades(symbol, tabId = null, tradeCount = 5, drawOpti
   }
 
   if (tabId) {
+    sendFetchProgress('trades', symbol, 'draw', 3, totalSteps);
     try {
       console.log(`📝 BACKGROUND: Drawing ${fetchResult.trades.length} trade notes on tab ${tabId}`);
 

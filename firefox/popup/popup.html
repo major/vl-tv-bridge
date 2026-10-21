@@ -9,155 +9,268 @@
 
 <body>
   <div class="container">
-    <header>
-      <div class="header-row">
-        <h1>📊 VL → TV Bridge</h1>
-        <span id="version" class="version"></span>
-      </div>
-      <div id="status" class="status"></div>
+    <header class="header-row">
+      <h1>📊 VL → TV Bridge</h1>
+      <span id="version" class="version"></span>
     </header>
 
-    <!-- Status Section -->
-    <section id="status-section" class="section hero">
-      <div id="tv-status" class="tv-status">
+    <!-- Setup checklist -->
+    <section class="checklist">
+      <div id="tv-status" class="check-row">
         <span class="indicator"></span>
+        <span class="check-label">Step 1</span>
         <span class="text">Checking TradingView...</span>
       </div>
-
-      <div id="chart-symbol" class="chart-symbol"></div>
-
-      <div id="vl-status" class="vl-status">
+      <div id="vl-status" class="check-row">
         <span class="indicator"></span>
+        <span class="check-label">Step 2</span>
         <span class="text">Checking VL login...</span>
       </div>
-
-      <div class="button-row">
-        <button id="fetch-draw-btn" class="btn primary" disabled>
-          📈 Draw Levels
-        </button>
-        <button id="fetch-trades-btn" class="btn primary" disabled>
-          📝 Draw Trades
-        </button>
+      <div id="vl-login-hint" class="hint hidden">
+        <button id="open-vl-btn" class="btn link">Log in to VolumeLeaders ↗</button>
       </div>
-
-      <button id="clear-chart-btn" class="btn secondary full-width" disabled>
-        🗑️ Clear Chart
-      </button>
     </section>
 
-    <!-- Tab Navigation -->
-    <div class="settings-label">⚙️ Settings</div>
-    <nav class="tabs">
-      <button class="tab active" data-tab="levels">📈 Levels</button>
-      <button class="tab" data-tab="trades">📝 Trades</button>
-    </nav>
+    <div id="chart-symbol" class="chart-symbol"></div>
 
-    <!-- Levels Tab -->
-    <div id="levels-tab" class="tab-content active">
-      <div class="settings-panel">
-        <div class="setting-row">
-          <label for="level-count-select">Number of levels:</label>
-          <select id="level-count-select" class="setting-select">
-            <option value="5">5 levels</option>
-            <option value="10" selected>10 levels</option>
-          </select>
-        </div>
-        <div class="setting-row">
-          <label for="year-range-select">Historical range:</label>
-          <select id="year-range-select" class="setting-select">
-            <option value="1">1 year</option>
-            <option value="2">2 years</option>
-            <option value="3">3 years</option>
-            <option value="5" selected>5 years</option>
-            <option value="10">10 years</option>
-            <option value="15">15 years</option>
-            <option value="20">20 years</option>
-          </select>
-        </div>
-        <div class="setting-row">
-          <label for="line-color-input">Line color:</label>
-          <input type="text" id="line-color-input" class="setting-text" value="#2962FF" placeholder="#2962FF" maxlength="7">
-        </div>
-        <div class="setting-row">
-          <label for="line-thickness-select">Line thickness:</label>
-          <select id="line-thickness-select" class="setting-select">
-            <option value="1">1px (thin)</option>
-            <option value="2" selected>2px (default)</option>
-            <option value="3">3px (medium)</option>
-            <option value="4">4px (thick)</option>
-            <option value="5">5px (very thick)</option>
-          </select>
-        </div>
-        <div class="setting-row">
-          <label for="line-opacity-select">Line opacity:</label>
-          <select id="line-opacity-select" class="setting-select">
-            <option value="100" selected>100% (opaque)</option>
-            <option value="75">75%</option>
-            <option value="50">50%</option>
-            <option value="25">25%</option>
-          </select>
-        </div>
-        <div class="setting-row">
-          <label class="toggle">
-            <input type="checkbox" id="show-dates-toggle">
-            <span>Show date ranges on labels</span>
-          </label>
+    <!-- Main actions -->
+    <section class="actions">
+      <button id="fetch-draw-btn" class="btn primary large" disabled>
+        <span class="btn-main">
+          <span class="spinner" aria-hidden="true"></span>
+          <span class="btn-label">📈 Draw Levels</span>
+        </span>
+        <span class="btn-sub">Big-money price zones</span>
+      </button>
+      <div id="fetch-draw-hint" class="btn-hint hidden"></div>
+
+      <button id="fetch-trades-btn" class="btn primary large" disabled>
+        <span class="btn-main">
+          <span class="spinner" aria-hidden="true"></span>
+          <span class="btn-label">📝 Draw Trades</span>
+        </span>
+        <span class="btn-sub">Largest recent trades</span>
+      </button>
+      <div id="fetch-trades-hint" class="btn-hint hidden"></div>
+
+      <button id="clear-chart-btn" class="btn secondary full-width" disabled>
+        🗑️ Clear chart
+      </button>
+      <div id="clear-chart-hint" class="btn-hint hidden"></div>
+    </section>
+
+    <!-- Status area -->
+    <section id="status" class="status" aria-live="polite">
+      <span id="status-main"></span>
+      <span id="status-tip" class="tip hidden"></span>
+    </section>
+
+    <!-- Customize (advanced) -->
+    <details id="customize">
+      <summary>⚙️ Customize (advanced)</summary>
+
+      <nav class="tabs" role="tablist">
+        <button class="tab active" data-tab="levels" role="tab" aria-selected="true">📈 Levels</button>
+        <button class="tab" data-tab="trades" role="tab" aria-selected="false">📝 Trades</button>
+        <button class="tab" data-tab="more" role="tab" aria-selected="false">🔧 More</button>
+      </nav>
+
+      <!-- Levels tab -->
+      <div id="levels-tab" class="tab-content active" role="tabpanel">
+        <div class="settings-panel">
+          <div class="panel-section">
+            <div class="panel-title">Levels</div>
+
+            <div class="setting-row">
+              <span class="setting-label">How many</span>
+              <fieldset class="segmented" data-group="levelCount">
+                <legend class="sr-only">How many levels</legend>
+                <label class="segment">
+                  <input type="radio" name="levelCount" value="5">
+                  <span>5</span>
+                </label>
+                <label class="segment">
+                  <input type="radio" name="levelCount" value="10" checked>
+                  <span>10</span>
+                </label>
+              </fieldset>
+            </div>
+
+            <div class="setting-row">
+              <label for="year-range-select" class="setting-label">Look back</label>
+              <select id="year-range-select" class="setting-select">
+                <option value="1">1 year</option>
+                <option value="2">2 years</option>
+                <option value="3">3 years</option>
+                <option value="5" selected>5 years</option>
+                <option value="10">10 years</option>
+                <option value="15">15 years</option>
+                <option value="20">20 years</option>
+              </select>
+            </div>
+
+            <div class="setting-row">
+              <label class="toggle" for="show-dates-toggle">
+                <span class="setting-label">Show dates</span>
+                <input type="checkbox" id="show-dates-toggle" role="switch">
+                <span class="switch" aria-hidden="true"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="panel-section">
+            <div class="panel-title">Line style</div>
+
+            <div class="setting-row">
+              <label for="line-color-input" class="setting-label">Color</label>
+              <span class="color-field">
+                <input type="color" id="line-color-input" value="#2962FF">
+                <span id="line-color-hex" class="hex-label">#2962FF</span>
+              </span>
+            </div>
+
+            <div class="setting-row">
+              <label for="line-thickness-range" class="setting-label">Thickness</label>
+              <span class="range-field">
+                <input type="range" id="line-thickness-range" min="1" max="5" step="1" value="2">
+                <span id="line-thickness-value" class="range-value">2 px</span>
+              </span>
+            </div>
+
+            <div class="setting-row">
+              <span class="setting-label">Opacity</span>
+              <fieldset class="segmented" data-group="lineOpacity">
+                <legend class="sr-only">Line opacity</legend>
+                <label class="segment">
+                  <input type="radio" name="lineOpacity" value="25">
+                  <span>25</span>
+                </label>
+                <label class="segment">
+                  <input type="radio" name="lineOpacity" value="50">
+                  <span>50</span>
+                </label>
+                <label class="segment">
+                  <input type="radio" name="lineOpacity" value="75">
+                  <span>75</span>
+                </label>
+                <label class="segment">
+                  <input type="radio" name="lineOpacity" value="100" checked>
+                  <span>100</span>
+                </label>
+              </fieldset>
+            </div>
+
+            <div class="preview-row">
+              <span class="preview-label">Preview</span>
+              <svg id="line-preview" class="line-preview" viewBox="0 0 220 16" aria-hidden="true">
+                <line x1="4" y1="8" x2="216" y2="8" />
+              </svg>
+            </div>
+          </div>
+
+          <button id="reset-levels-btn" class="btn text">↺ Reset to defaults</button>
         </div>
       </div>
-    </div>
 
-    <!-- Trades Tab -->
-    <div id="trades-tab" class="tab-content">
-      <div class="settings-panel">
-        <div class="setting-row">
-          <label for="trade-count-select">Number of trades:</label>
-          <select id="trade-count-select" class="setting-select">
-            <option value="5" selected>5 trades</option>
-            <option value="10">10 trades</option>
-            <option value="15">15 trades</option>
-            <option value="20">20 trades</option>
-          </select>
-        </div>
-        <div class="setting-row">
-          <label for="trade-lit-color-input">Lit trade color:</label>
-          <input type="text" id="trade-lit-color-input" class="setting-text" value="#92CBF9" placeholder="#92CBF9" maxlength="7">
-        </div>
-        <div class="setting-row">
-          <label for="trade-dark-pool-color-input">Dark pool color:</label>
-          <input type="text" id="trade-dark-pool-color-input" class="setting-text" value="#F4A460" placeholder="#F4A460" maxlength="7">
-        </div>
-        <div class="setting-row">
-          <label for="trade-thickness-select">Trade thickness:</label>
-          <select id="trade-thickness-select" class="setting-select">
-            <option value="1" selected>1px (default)</option>
-            <option value="2">2px</option>
-            <option value="3">3px (medium)</option>
-            <option value="4">4px (thick)</option>
-            <option value="5">5px (very thick)</option>
-          </select>
-        </div>
-        <div class="setting-row">
-          <label class="toggle">
-            <input type="checkbox" id="show-original-trade-rank-toggle">
-            <span>Show original rank on trade labels</span>
-          </label>
-        </div>
-        <div class="setting-row">
-          <label for="trade-label-position-select">Label position:</label>
-          <select id="trade-label-position-select" class="setting-select">
-            <option value="right" selected>Right</option>
-            <option value="left">Left</option>
-          </select>
+      <!-- Trades tab -->
+      <div id="trades-tab" class="tab-content" role="tabpanel">
+        <div class="settings-panel">
+          <div class="panel-section">
+            <div class="panel-title">Trades</div>
+
+            <div class="setting-row">
+              <span class="setting-label">How many</span>
+              <fieldset class="segmented" data-group="tradeCount">
+                <legend class="sr-only">How many trades</legend>
+                <label class="segment">
+                  <input type="radio" name="tradeCount" value="5" checked>
+                  <span>5</span>
+                </label>
+                <label class="segment">
+                  <input type="radio" name="tradeCount" value="10">
+                  <span>10</span>
+                </label>
+                <label class="segment">
+                  <input type="radio" name="tradeCount" value="15">
+                  <span>15</span>
+                </label>
+                <label class="segment">
+                  <input type="radio" name="tradeCount" value="20">
+                  <span>20</span>
+                </label>
+              </fieldset>
+            </div>
+
+            <div class="setting-row">
+              <label for="trade-thickness-range" class="setting-label">Thickness</label>
+              <span class="range-field">
+                <input type="range" id="trade-thickness-range" min="1" max="5" step="1" value="1">
+                <span id="trade-thickness-value" class="range-value">1 px</span>
+              </span>
+            </div>
+
+            <div class="setting-row">
+              <label class="toggle" for="show-original-trade-rank-toggle">
+                <span class="setting-label">Show original rank</span>
+                <input type="checkbox" id="show-original-trade-rank-toggle" role="switch">
+                <span class="switch" aria-hidden="true"></span>
+              </label>
+            </div>
+
+            <div class="setting-row">
+              <span class="setting-label">Label position</span>
+              <fieldset class="segmented" data-group="tradeLabelPosition">
+                <legend class="sr-only">Label position</legend>
+                <label class="segment">
+                  <input type="radio" name="tradeLabelPosition" value="left">
+                  <span>Left</span>
+                </label>
+                <label class="segment">
+                  <input type="radio" name="tradeLabelPosition" value="right" checked>
+                  <span>Right</span>
+                </label>
+              </fieldset>
+            </div>
+          </div>
+
+          <div class="panel-section">
+            <div class="panel-title">Colors</div>
+
+            <div class="color-legend-row">
+              <label class="color-field" for="trade-lit-color-input">
+                <input type="color" id="trade-lit-color-input" value="#92CBF9">
+                <span id="trade-lit-color-hex" class="hex-label">#92CBF9</span>
+                <span class="legend-tag lit">🔵 Lit</span>
+              </label>
+              <label class="color-field" for="trade-dark-pool-color-input">
+                <input type="color" id="trade-dark-pool-color-input" value="#F4A460">
+                <span id="trade-dark-pool-color-hex" class="hex-label">#F4A460</span>
+                <span class="legend-tag dark">🟠 Dark pool</span>
+              </label>
+            </div>
+          </div>
+
+          <button id="reset-trades-btn" class="btn text">↺ Reset to defaults</button>
         </div>
       </div>
-    </div>
 
-    <footer>
-      <label class="toggle">
-        <input type="checkbox" id="debug-toggle">
-        <span>Debug mode</span>
-      </label>
-    </footer>
+      <!-- More tab -->
+      <div id="more-tab" class="tab-content" role="tabpanel">
+        <div class="settings-panel">
+          <div class="panel-section">
+            <div class="panel-title">More</div>
+
+            <div class="setting-row">
+              <label class="toggle" for="debug-toggle">
+                <span class="setting-label">Debug mode</span>
+                <input type="checkbox" id="debug-toggle" role="switch">
+                <span class="switch" aria-hidden="true"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+    </details>
   </div>
 
   <script src="popup.js"></script>

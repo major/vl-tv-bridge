@@ -225,8 +225,8 @@
     }
 
     const color = darkPool
-      ? (options.tradeDarkPoolColor || 'rgba(255, 152, 0, 1)')
-      : (options.tradeLitColor || 'rgba(41, 98, 255, 1)');
+      ? (options.tradeDarkPoolColor || 'rgba(244, 164, 96, 1)')
+      : (options.tradeLitColor || 'rgba(146, 203, 249, 1)');
     let volLabel = '';
     if (dollarVolume) {
       if (dollarVolume >= 1e9) {
@@ -247,7 +247,7 @@
         zOrder: 'top',
         overrides: {
           linecolor: color,
-          linewidth: options.tradeThickness || 2,
+          linewidth: options.tradeThickness || 1,
           linestyle: options.linestyle || 0,
           showLabel: true,
           textcolor: options.textcolor || color,

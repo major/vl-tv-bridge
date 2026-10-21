@@ -122,12 +122,17 @@
             <div class="panel-title">Line style</div>
 
             <div class="setting-row">
-              <label for="line-color-input" class="setting-label">Color</label>
+              <span id="line-color-label" class="setting-label">Color</span>
               <span class="color-field">
-                <input type="color" id="line-color-input" value="#2962FF">
+                <button type="button" class="color-swatch" id="line-color-swatch"
+                  aria-expanded="false" aria-controls="line-color-panel"
+                  aria-label="Change level line color, current #2962FF"
+                  style="--swatch-color: #2962FF;"></button>
                 <span id="line-color-hex" class="hex-label">#2962FF</span>
+                <input type="hidden" id="line-color-input" value="#2962FF">
               </span>
             </div>
+            <div class="color-picker-panel hidden" id="line-color-panel"></div>
 
             <div class="setting-row">
               <label for="line-thickness-range" class="setting-label">Thickness</label>
@@ -236,18 +241,31 @@
           <div class="panel-section">
             <div class="panel-title">Colors</div>
 
-            <div class="color-legend-row">
-              <label class="color-field" for="trade-lit-color-input">
-                <input type="color" id="trade-lit-color-input" value="#92CBF9">
+            <div class="setting-row">
+              <span id="trade-lit-color-label" class="setting-label">🔵 Lit trades</span>
+              <span class="color-field">
+                <button type="button" class="color-swatch" id="trade-lit-color-swatch"
+                  aria-expanded="false" aria-controls="trade-lit-color-panel"
+                  aria-label="Change lit trade color, current #92CBF9"
+                  style="--swatch-color: #92CBF9;"></button>
                 <span id="trade-lit-color-hex" class="hex-label">#92CBF9</span>
-                <span class="legend-tag lit">🔵 Lit</span>
-              </label>
-              <label class="color-field" for="trade-dark-pool-color-input">
-                <input type="color" id="trade-dark-pool-color-input" value="#F4A460">
-                <span id="trade-dark-pool-color-hex" class="hex-label">#F4A460</span>
-                <span class="legend-tag dark">🟠 Dark pool</span>
-              </label>
+                <input type="hidden" id="trade-lit-color-input" value="#92CBF9">
+              </span>
             </div>
+            <div class="color-picker-panel hidden" id="trade-lit-color-panel"></div>
+
+            <div class="setting-row">
+              <span id="trade-dark-pool-color-label" class="setting-label">🟠 Dark pool trades</span>
+              <span class="color-field">
+                <button type="button" class="color-swatch" id="trade-dark-pool-color-swatch"
+                  aria-expanded="false" aria-controls="trade-dark-pool-color-panel"
+                  aria-label="Change dark pool trade color, current #F4A460"
+                  style="--swatch-color: #F4A460;"></button>
+                <span id="trade-dark-pool-color-hex" class="hex-label">#F4A460</span>
+                <input type="hidden" id="trade-dark-pool-color-input" value="#F4A460">
+              </span>
+            </div>
+            <div class="color-picker-panel hidden" id="trade-dark-pool-color-panel"></div>
           </div>
 
           <button id="reset-trades-btn" class="btn text">↺ Reset to defaults</button>
@@ -273,6 +291,7 @@
     </details>
   </div>
 
+  <script src="color.js"></script>
   <script src="popup.js"></script>
 </body>
 

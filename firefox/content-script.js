@@ -11,18 +11,17 @@ if (window !== window.top) {
 } else if (window.vlTvBridgeLoaded) {
   console.log('🌉 VL-TV Bridge: Already loaded, skipping duplicate');
 } else {
-  // Mark as loaded
   window.vlTvBridgeLoaded = true;
   console.log('🌉 VL-TV Bridge: Content script loaded on TradingView');
 
-  // Track drawn shapes for cleanup
-  let drawnShapeIds = [];
+  const DRAWING_STORAGE_PREFIX = 'vlDrawings:';
+  const COUNTRY_SUFFIXES = ['.US', '.UK', '.DE', '.FR', '.JP', '.HK', '.AU', '.CA'];
+  let drawingQueue = Promise.resolve();
 
   /**
-   * Inject the script that will have access to TradingViewApi
+   * Inject the script that will have access to TradingViewApi.
    */
   function injectScript() {
-    // Check if already injected
     if (document.getElementById('vl-tv-injected')) {
       console.log('💉 Injected script already present');
       return;
@@ -39,28 +38,39 @@ if (window !== window.top) {
   }
 
   /**
-   * Listen for messages from the extension popup/background
+   * Add a chart drawing operation to the serialized runtime queue.
+   * @param {Function} operation - The async drawing operation to run.
+   * @returns {Promise<*>} The operation result.
+   */
+  function queueDrawingOperation(operation) {
+    const queuedOperation = drawingQueue.then(operation);
+    drawingQueue = queuedOperation.catch(() => {});
+    return queuedOperation;
+  }
+
+  /**
+   * Listen for messages from the extension popup/background.
    */
   browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     console.log('📨 Content script received:', message);
 
     switch (message.type) {
       case 'DRAW_LEVELS':
-        drawLevels(message.levels, message.options)
-          .then(result => sendResponse(result))
-          .catch(err => sendResponse({ success: false, error: err.message }));
-        return true; // Async response
+        queueDrawingOperation(() => drawLevels(message.levels, message.options, message.symbol))
+          .then(sendResponse)
+          .catch(err => sendResponse({ success: false, drawn: 0, failed: 0, zones: 0, levels: 0, results: [], error: err.message }));
+        return true;
 
       case 'CLEAR_DRAWN':
-        clearDrawnLevels()
-          .then(result => sendResponse(result))
-          .catch(err => sendResponse({ success: false, error: err.message }));
+        queueDrawingOperation(clearDrawnLevels)
+          .then(sendResponse)
+          .catch(err => sendResponse({ success: false, removed: 0, results: [], error: err.message }));
         return true;
 
       case 'DRAW_NOTES':
-        drawNotes(message.trades, message.options)
-          .then(result => sendResponse(result))
-          .catch(err => sendResponse({ success: false, error: err.message }));
+        queueDrawingOperation(() => drawNotes(message.trades, message.options, message.symbol))
+          .then(sendResponse)
+          .catch(err => sendResponse({ success: false, drawn: 0, skipped: 0, failed: 0, darkPoolCount: 0, litCount: 0, results: [], error: err.message }));
         return true;
 
       case 'CHECK_TV_READY':
@@ -84,17 +94,23 @@ if (window !== window.top) {
   });
 
   /**
-   * Send command to injected script and wait for response
+   * Send a command to the injected script and wait for its response.
+   * @param {string} command - The injected-script command.
+   * @param {Object} data - Command data.
+   * @param {number} timeoutMs - Maximum wait time in milliseconds.
+   * @returns {Promise<*>} The injected-script result.
    */
-  function sendToInjected(command, data = {}) {
+  function sendToInjected(command, data = {}, timeoutMs = 5000) {
     return new Promise((resolve, reject) => {
       const messageId = Date.now().toString(36) + Math.random().toString(36);
+      let timeoutId;
 
-      const handler = (event) => {
+      const handler = event => {
         if (event.source !== window) return;
         if (!event.data || event.data.source !== 'vl-tv-injected') return;
         if (event.data.messageId !== messageId) return;
 
+        clearTimeout(timeoutId);
         window.removeEventListener('message', handler);
 
         if (event.data.error) {
@@ -105,12 +121,10 @@ if (window !== window.top) {
       };
 
       window.addEventListener('message', handler);
-
-      // Timeout after 5 seconds
-      setTimeout(() => {
+      timeoutId = setTimeout(() => {
         window.removeEventListener('message', handler);
         reject(new Error('Timeout waiting for injected script response'));
-      }, 5000);
+      }, timeoutMs);
 
       window.postMessage({
         source: 'vl-tv-content',
@@ -122,7 +136,8 @@ if (window !== window.top) {
   }
 
   /**
-   * Check if TradingView API is ready
+   * Check whether the TradingView API is ready.
+   * @returns {Promise<boolean>} True when the chart API is ready.
    */
   async function checkTradingViewReady() {
     try {
@@ -134,7 +149,8 @@ if (window !== window.top) {
   }
 
   /**
-   * Get the current chart symbol
+   * Get the current chart symbol.
+   * @returns {Promise<string|null>} The current symbol, or null if unavailable.
    */
   async function getCurrentSymbol() {
     try {
@@ -146,206 +162,306 @@ if (window !== window.top) {
   }
 
   /**
-   * Draw trade levels on the chart
-   * First clears any existing VL-prefixed shapes, then draws new ones
-   * Handles both single levels (type: 'level') and zones (type: 'zone')
+   * Normalize a TradingView symbol for comparison.
+   * @param {string} symbol - The symbol from a message or chart context.
+   * @returns {string|null} The normalized ticker, or null for invalid input.
    */
-  async function drawLevels(levels, options = {}) {
-    const levelCount = levels.filter(l => l.type !== 'zone').length;
-    const zoneCount = levels.filter(l => l.type === 'zone').length;
-    console.log(`🎯 CONTENT: drawLevels called with ${levelCount} levels and ${zoneCount} zones`);
+  function normalizeSymbol(symbol) {
+    if (typeof symbol !== 'string' || !symbol.trim()) return null;
 
-    // Clear existing VL lines first (keeps circles intact)
-    try {
-      const clearResult = await sendToInjected('CLEAR_VL_LINES');
-      console.log(`🧹 Cleared ${clearResult.removed} existing VL lines`);
-    } catch (err) {
-      console.warn('Could not clear existing VL lines:', err);
-    }
-
-    const results = [];
-
-    for (const item of levels) {
-      try {
-        let result;
-
-        if (item.type === 'zone') {
-          // Draw zone as thick line at midpoint
-          result = await sendToInjected('DRAW_ZONE', {
-            highPrice: item.highPrice,
-            lowPrice: item.lowPrice,
-            midPrice: item.midPrice,
-            timestamp: item.timestamp,
-            label: item.label,
-            options: {
-              linecolor: options.color || '#02A9DE',
-              linewidth: 4, // Thick line for zones
-              lineopacity: options.opacity ?? 100,
-              linestyle: options.style || 0
-            }
-          });
-
-          if (result.shapeId) {
-            drawnShapeIds.push(result.shapeId);
-            results.push({
-              type: 'zone',
-              midPrice: item.midPrice,
-              highPrice: item.highPrice,
-              lowPrice: item.lowPrice,
-              shapeId: result.shapeId,
-              success: true
-            });
-          }
-        } else {
-          // Draw single level as normal line
-          result = await sendToInjected('DRAW_LINE', {
-            price: item.price,
-            timestamp: item.timestamp,
-            label: item.label || `VL ${item.price}`,
-            options: {
-              linecolor: options.color || '#02A9DE',
-              linewidth: options.width || 2,
-              lineopacity: options.opacity ?? 100,
-              linestyle: options.style || 0
-            }
-          });
-
-          if (result.shapeId) {
-            drawnShapeIds.push(result.shapeId);
-            results.push({ type: 'level', price: item.price, shapeId: result.shapeId, success: true });
-          }
-        }
-      } catch (err) {
-        const identifier = item.type === 'zone' ? `zone at ${item.midPrice}` : `level at ${item.price}`;
-        console.error(`❌ Failed to draw ${identifier}:`, err);
-        results.push({
-          type: item.type || 'level',
-          price: item.price || item.midPrice,
-          success: false,
-          error: err.message
-        });
+    let ticker = symbol.trim().toUpperCase().split(':').pop();
+    for (const suffix of COUNTRY_SUFFIXES) {
+      if (ticker.endsWith(suffix)) {
+        ticker = ticker.slice(0, -suffix.length);
+        break;
       }
     }
-
-    // Save drawn shape IDs for cleanup
-    await browser.storage.local.set({ drawnShapeIds });
-
-    return {
-      success: true,
-      drawn: results.filter(r => r.success).length,
-      failed: results.filter(r => !r.success).length,
-      zones: results.filter(r => r.type === 'zone' && r.success).length,
-      levels: results.filter(r => r.type === 'level' && r.success).length,
-      results
-    };
-  }
-
-  async function drawNotes(trades, options = {}) {
-    console.log(`📝 CONTENT: drawNotes called with ${trades.length} trades`);
-
-    try {
-      const clearResult = await sendToInjected('CLEAR_VL_NOTES');
-      console.log(`🧹 Cleared ${clearResult.removed} existing VL notes`);
-    } catch (err) {
-      console.warn('Could not clear existing VL notes:', err);
-    }
-
-    const results = [];
-
-    for (const trade of trades) {
-      try {
-        const result = await sendToInjected('DRAW_NOTE', {
-          price: trade.price,
-          timestamp: trade.timestamp,
-          rank: trade.rank,
-          originalRank: trade.originalRank,
-          darkPool: trade.darkPool,
-          sweep: trade.sweep,
-          dollarVolume: trade.dollarVolume ?? trade.dollars,
-          options: options
-        });
-
-        if (result.skipped) {
-          results.push({
-            price: trade.price,
-            rank: trade.rank,
-            skipped: true,
-            reason: result.reason
-          });
-        } else if (result.shapeId) {
-          drawnShapeIds.push(result.shapeId);
-          results.push({
-            price: trade.price,
-            timestamp: trade.timestamp,
-            rank: trade.rank,
-            darkPool: trade.darkPool,
-            shapeId: result.shapeId,
-            success: true
-          });
-        }
-      } catch (err) {
-        console.error(`❌ Failed to draw note for trade #${trade.rank}:`, err);
-        results.push({
-          price: trade.price,
-          rank: trade.rank,
-          success: false,
-          error: err.message
-        });
-      }
-    }
-
-    await browser.storage.local.set({ drawnShapeIds });
-
-    const successCount = results.filter(r => r.success).length;
-    const skippedCount = results.filter(r => r.skipped).length;
-    const dpCount = results.filter(r => r.success && r.darkPool).length;
-    const litCount = successCount - dpCount;
-
-    return {
-      success: true,
-      drawn: successCount,
-      skipped: skippedCount,
-      failed: results.filter(r => !r.success && !r.skipped).length,
-      darkPoolCount: dpCount,
-      litCount: litCount,
-      results
-    };
+    return ticker || null;
   }
 
   /**
-   * Clear all VL-drawn levels from the chart
+   * Get the active drawing context and validate an optional expected symbol.
+   * @param {string} expectedSymbol - Expected TradingView symbol, when supplied.
+   * @returns {Promise<Object>} The validated context returned by the injected script.
+   */
+  async function getDrawingContext(expectedSymbol) {
+    const context = await sendToInjected('GET_DRAWING_CONTEXT');
+    if (!context || typeof context.key !== 'string' || !context.key || typeof context.symbol !== 'string') {
+      throw new Error('Invalid TradingView drawing context');
+    }
+
+    if (expectedSymbol !== undefined && expectedSymbol !== null) {
+      const expected = normalizeSymbol(expectedSymbol);
+      const actual = normalizeSymbol(context.symbol);
+      if (!expected || !actual || expected !== actual) {
+        throw new Error(`Chart symbol mismatch: expected ${expectedSymbol}, found ${context.symbol}`);
+      }
+    }
+
+    return context;
+  }
+
+  /**
+   * Build the storage key for one chart context and drawing category.
+   * @param {Object} context - A validated chart context.
+   * @param {string} kind - The drawing category, either levels or trades.
+   * @returns {string} The scoped storage key.
+   */
+  function getDrawingStorageKey(context, kind) {
+    return `${DRAWING_STORAGE_PREFIX}${context.key}:${kind}`;
+  }
+
+  /**
+   * Read stored drawing records for one chart context and category.
+   * @param {string} storageKey - The scoped storage key.
+   * @returns {Promise<Array>} Previously saved opaque reconciliation records.
+   */
+  async function readDrawingRecords(storageKey) {
+    const stored = await browser.storage.local.get(storageKey);
+    const records = stored?.[storageKey];
+    if (records === undefined) return [];
+    if (!Array.isArray(records)) throw new Error(`Invalid stored drawing records for ${storageKey}`);
+    return records;
+  }
+
+  /**
+   * Convert the core reconciliation response into a validated result.
+   * @param {*} result - The injected script response.
+   * @returns {Object} A validated response or a descriptive error.
+   */
+  function validateReconciliationResult(result, expectedResultCount) {
+    if (!result || typeof result !== 'object' || typeof result.success !== 'boolean' ||
+        !Array.isArray(result.results) || result.results.length !== expectedResultCount || !Array.isArray(result.records)) {
+      throw new Error('Invalid drawing reconciliation response');
+    }
+
+    if (result.results.some(itemResult => !itemResult || typeof itemResult !== 'object' ||
+        (typeof itemResult.success !== 'boolean' && itemResult.skipped !== true))) {
+      throw new Error('Invalid per-item drawing reconciliation result');
+    }
+
+    const removed = Array.isArray(result.removed) ? result.removed.length : result.removed;
+    if (!Number.isFinite(removed) || removed < 0) {
+      throw new Error('Invalid removed count in drawing reconciliation response');
+    }
+
+    return { ...result, removed };
+  }
+
+  /**
+   * Reconcile drawings for one scope and persist the core's returned records.
+   * @param {Object} context - The validated active chart context.
+   * @param {string} kind - The drawing category.
+   * @param {Array} items - Normalized drawing items.
+   * @returns {Promise<Object>} The reconciliation result and storage outcome.
+   */
+  async function reconcileDrawings(context, kind, items) {
+    const storageKey = getDrawingStorageKey(context, kind);
+    const records = await readDrawingRecords(storageKey);
+    const coreResponse = await sendToInjected('RECONCILE_DRAWINGS', {
+      kind,
+      items,
+      records,
+      context
+    }, 30000);
+    const result = validateReconciliationResult(coreResponse, items.length);
+
+    try {
+      await browser.storage.local.set({ [storageKey]: result.records });
+    } catch (err) {
+      return { ...result, success: false, error: err.message || 'Could not save drawing records' };
+    }
+
+    return result;
+  }
+
+  /**
+   * Convert core item results into the original response shape with source metadata.
+   * @param {Array} items - The submitted normalized items.
+   * @param {Array} coreResults - The core's per-item results.
+   * @returns {Array} Results aligned to submitted items.
+   */
+  function mergeItemResults(items, coreResults) {
+    return items.map((item, index) => {
+      const coreResult = coreResults[index];
+      if (!coreResult || typeof coreResult !== 'object') {
+        return { ...item, success: false, error: 'Missing drawing result' };
+      }
+      return {
+        ...item,
+        ...coreResult,
+        ...(Object.hasOwn(item, 'darkPool') ? { darkPool: item.darkPool } : {})
+      };
+    });
+  }
+
+  /**
+   * Create a failed level response for errors before usable core results exist.
+   * @param {string} error - The failure message.
+   * @returns {Object} The levels response contract with zero counts.
+   */
+  function failedLevelsResponse(error, failed = 0) {
+    return { success: false, drawn: 0, failed, zones: 0, levels: 0, results: [], removed: 0, error };
+  }
+
+  /**
+   * Create a failed trades response for errors before usable core results exist.
+   * @param {string} error - The failure message.
+   * @returns {Object} The trades response contract with zero counts.
+   */
+  function failedTradesResponse(error, failed = 0) {
+    return { success: false, drawn: 0, skipped: 0, failed, darkPoolCount: 0, litCount: 0, results: [], removed: 0, error };
+  }
+
+  /**
+   * Draw or reconcile trade levels in one scoped batch.
+   * @param {Array} levels - Background-provided levels and zones.
+   * @param {Object} options - Drawing style options.
+   * @param {string} expectedSymbol - Expected symbol, when provided.
+   * @returns {Promise<Object>} The levels drawing response.
+   */
+  async function drawLevels(levels, options = {}, expectedSymbol) {
+    if (!Array.isArray(levels)) return failedLevelsResponse('Levels must be an array');
+
+    const items = levels.map(item => {
+      if (item?.type === 'zone') {
+        return {
+          type: 'zone',
+          highPrice: item.highPrice,
+          lowPrice: item.lowPrice,
+          midPrice: item.midPrice,
+          timestamp: item.timestamp,
+          label: item.label,
+          levels: Array.isArray(item.levels)
+            ? item.levels.map(level => ({ price: level.price, timestamp: level.timestamp }))
+            : [],
+          options: {
+            linecolor: options.color || '#02A9DE',
+            linewidth: 4,
+            lineopacity: options.opacity ?? 100,
+            linestyle: options.style || 0
+          }
+        };
+      }
+
+      return {
+        type: 'level',
+        price: item?.price,
+        timestamp: item?.timestamp,
+        label: item?.label || `VL ${item?.price}`,
+        options: {
+          linecolor: options.color || '#02A9DE',
+          linewidth: options.width || 2,
+          lineopacity: options.opacity ?? 100,
+          linestyle: options.style || 0
+        }
+      };
+    });
+
+    try {
+      const context = await getDrawingContext(expectedSymbol);
+      const coreResult = await reconcileDrawings(context, 'levels', items);
+      const results = mergeItemResults(items, coreResult.results);
+      const successfulResults = results.filter(result => result.success === true);
+      const failed = results.filter(result => result.success !== true).length;
+      const drawn = successfulResults.length;
+      const response = {
+        success: coreResult.success && failed === 0,
+        drawn,
+        failed,
+        zones: successfulResults.filter(result => result.type === 'zone').length,
+        levels: successfulResults.filter(result => result.type === 'level').length,
+        results,
+        removed: coreResult.removed
+      };
+      if (coreResult.error) response.error = coreResult.error;
+      return response;
+    } catch (err) {
+      return failedLevelsResponse(err.message || 'Could not reconcile levels', items.length);
+    }
+  }
+
+  /**
+   * Draw or reconcile trade markers in one scoped batch.
+   * @param {Array} trades - Background-provided trades.
+   * @param {Object} options - Trade drawing style options.
+   * @param {string} expectedSymbol - Expected symbol, when provided.
+   * @returns {Promise<Object>} The trades drawing response.
+   */
+  async function drawNotes(trades, options = {}, expectedSymbol) {
+    if (!Array.isArray(trades)) return failedTradesResponse('Trades must be an array');
+
+    const items = trades.map(trade => ({
+      price: trade.price,
+      timestamp: trade.timestamp,
+      rank: trade.rank,
+      originalRank: trade.originalRank,
+      darkPool: trade.darkPool,
+      sweep: trade.sweep,
+      dollarVolume: trade.dollarVolume ?? trade.dollars,
+      options
+    }));
+
+    try {
+      const context = await getDrawingContext(expectedSymbol);
+      const coreResult = await reconcileDrawings(context, 'trades', items);
+      const results = mergeItemResults(items, coreResult.results);
+      const successfulResults = results.filter(result => result.success === true);
+      const skipped = results.filter(result => result.skipped === true).length;
+      const failed = results.filter(result => result.success !== true && result.skipped !== true).length;
+      const darkPoolCount = successfulResults.filter(result => result.darkPool).length;
+      const response = {
+        success: coreResult.success && failed === 0,
+        drawn: successfulResults.length,
+        skipped,
+        failed,
+        darkPoolCount,
+        litCount: successfulResults.length - darkPoolCount,
+        results,
+        removed: coreResult.removed
+      };
+      if (coreResult.error) response.error = coreResult.error;
+      return response;
+    } catch (err) {
+      return failedTradesResponse(err.message || 'Could not reconcile trades', items.length);
+    }
+  }
+
+  /**
+   * Clear levels and trades from only the active chart context.
+   * @returns {Promise<Object>} The aggregate clear response.
    */
   async function clearDrawnLevels() {
-    const results = [];
+    let context;
+    try {
+      context = await getDrawingContext();
+    } catch (err) {
+      return { success: false, removed: 0, results: [], error: err.message || 'Could not get chart context' };
+    }
 
-    for (const shapeId of drawnShapeIds) {
+    const results = [];
+    const errors = [];
+    let removed = 0;
+    let success = true;
+
+    for (const kind of ['levels', 'trades']) {
       try {
-        await sendToInjected('REMOVE_SHAPE', { shapeId });
-        results.push({ shapeId, success: true });
+        const result = await reconcileDrawings(context, kind, []);
+        removed += result.removed;
+        results.push(...result.results);
+        if (!result.success) success = false;
+        if (result.error) errors.push(result.error);
       } catch (err) {
-        results.push({ shapeId, success: false, error: err.message });
+        success = false;
+        errors.push(err.message || `Could not clear ${kind}`);
       }
     }
 
-    drawnShapeIds = [];
-    await browser.storage.local.set({ drawnShapeIds: [] });
-
-    return {
-      success: true,
-      removed: results.filter(r => r.success).length,
-      results
-    };
+    const response = { success, removed, results };
+    if (errors.length) response.error = errors.join('; ');
+    return response;
   }
 
-  /**
-   * Load previously drawn shape IDs from storage
-   */
-  async function loadDrawnShapeIds() {
-    const stored = await browser.storage.local.get('drawnShapeIds');
-    drawnShapeIds = stored.drawnShapeIds || [];
-  }
-
-  // 🚀 Initialize
-  loadDrawnShapeIds();
+  // 🚀 Initialize without loading the obsolete global shape-ID tracker.
   injectScript();
 }

@@ -16,6 +16,10 @@ function loadBackground(settings = {}) {
     fetch: async (url, options = {}) => {
       fetchCalls.push({ url, options });
 
+      if (settings.fetchError && String(url).includes('/Chart0/')) {
+        throw settings.fetchError;
+      }
+
       if (String(url).includes('/TradeLevels?Ticker=SPY')) {
         return {
           ok: true,
@@ -373,4 +377,40 @@ test('levels parse MinDate and propagate the earliest clustered anchor to drawin
   assert.equal(drawMessage.levels[0].type, 'zone');
   assert.equal(drawMessage.levels[0].timestamp, 1779062400);
   assert.equal(drawMessage.levels[1].timestamp, null);
+});
+
+test('successful empty level and trade results are sent to the tab with the requested symbol', async () => {
+  const context = loadBackground({ levelsData: [], tradesData: [] });
+
+  await context.fetchAndDraw('crdu', 123);
+  await context.fetchAndDrawTrades('crdu', 123);
+
+  const levelMessage = context.tabMessages.find(entry => entry.message.type === 'DRAW_LEVELS').message;
+  const tradeMessage = context.tabMessages.find(entry => entry.message.type === 'DRAW_NOTES').message;
+  assert.deepEqual(plain(levelMessage.levels), []);
+  assert.deepEqual(plain(tradeMessage.trades), []);
+  assert.equal(levelMessage.symbol, 'crdu');
+  assert.equal(tradeMessage.symbol, 'crdu');
+});
+
+test('failed level and trade fetches do not send drawing messages', async () => {
+  const failures = [
+    { fetchError: new Error('network failure') },
+    {
+      levelResponse: { ok: false, status: 401 },
+      tradeResponse: { ok: false, status: 401 }
+    },
+    {
+      levelResponse: { body: { data: [] } },
+      tradeResponse: { body: [] }
+    }
+  ];
+
+  for (const failure of failures) {
+    const context = loadBackground(failure);
+
+    await assert.rejects(context.fetchAndDraw('CRDU', 123));
+    await assert.rejects(context.fetchAndDrawTrades('CRDU', 123));
+    assert.equal(context.tabMessages.some(entry => ['DRAW_LEVELS', 'DRAW_NOTES'].includes(entry.message.type)), false);
+  }
 });

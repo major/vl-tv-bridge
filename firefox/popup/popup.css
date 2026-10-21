@@ -279,10 +279,6 @@ body {
 .tab:focus-visible,
 .segment input:focus-visible+span,
 select:focus-visible,
-.color-swatch:focus-visible,
-.sv-square:focus-visible,
-.hue-range:focus-visible,
-.preset-swatch:focus-visible,
 .hex-input:focus-visible,
 input[type="range"]:focus-visible,
 summary:focus-visible {
@@ -565,156 +561,44 @@ details[open] summary::before {
   outline-offset: 2px;
 }
 
-/* Color field */
+/* Color field: a small static swatch next to a hex text input */
 .color-field {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 8px;
 }
 
 .color-swatch {
-  width: 28px;
-  height: 24px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background-color: var(--swatch-color, #000);
-  padding: 0;
-  cursor: pointer;
-  transition: border-color 0.15s;
-}
-
-.color-swatch:hover {
-  border-color: var(--accent);
-}
-
-.color-swatch[aria-expanded="true"] {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.hex-label {
-  font-family: 'Menlo', 'Monaco', monospace;
-  font-size: 11px;
-  color: var(--fg-muted);
-  text-transform: uppercase;
-}
-
-/* Custom color picker panel (replaces native <input type="color">, which opens an
-   OS dialog that steals focus and closes the popup on Linux/Firefox). */
-.color-picker-panel {
-  margin: 2px 0 10px;
-  padding: 10px;
-  background: var(--bg-sunken);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.sv-square {
-  position: relative;
-  width: 100%;
-  height: 120px;
-  border-radius: 6px;
-  cursor: crosshair;
-  touch-action: none;
-  background-image:
-    linear-gradient(to top, #000, transparent),
-    linear-gradient(to right, #fff, transparent);
-  background-color: hsl(var(--hue, 210), 100%, 50%);
-}
-
-.sv-thumb {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 14px;
-  height: 14px;
-  margin-left: -7px;
-  margin-top: -7px;
-  border-radius: 50%;
-  border: 2px solid #fff;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.4);
-  pointer-events: none;
-}
-
-.hue-range {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 100%;
-  height: 12px;
-  border-radius: 6px;
-  background: linear-gradient(to right,
-      hsl(0, 100%, 50%), hsl(60, 100%, 50%), hsl(120, 100%, 50%),
-      hsl(180, 100%, 50%), hsl(240, 100%, 50%), hsl(300, 100%, 50%), hsl(360, 100%, 50%));
-  cursor: pointer;
-}
-
-.hue-range::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: #fff;
-  border: 2px solid var(--border);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
-}
-
-.hue-range::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: #fff;
-  border: 2px solid var(--border);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
-}
-
-.preset-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.preset-swatch {
+  flex: none;
   width: 20px;
   height: 20px;
-  border-radius: 4px;
   border: 1px solid var(--border);
-  padding: 0;
-  cursor: pointer;
-}
-
-.preset-swatch.selected {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-.hex-input-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  border-radius: 4px;
+  background-color: var(--bg-sunken);
 }
 
 .hex-input {
-  flex: 1;
-  min-width: 0;
+  width: 8ch;
   padding: 6px 8px;
   border: 1px solid var(--border);
   border-radius: 6px;
-  background: var(--bg-raised);
+  background: var(--bg-sunken);
   color: var(--fg);
   font-family: 'Menlo', 'Monaco', monospace;
   font-size: 12px;
   text-transform: uppercase;
 }
 
-.hex-input.invalid {
+.hex-input[aria-invalid="true"] {
   border-color: var(--danger);
 }
 
+/* Sits on its own line below the input so it never squeezes the row */
 .hex-error {
+  flex-basis: 100%;
+  text-align: right;
   font-size: 11px;
   color: var(--danger);
 }

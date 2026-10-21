@@ -106,9 +106,9 @@ async function init() {
   elements.debugToggle.checked = stored.debugMode || false;
   elements.levelCountSelect.value = stored.levelCount ?? 10;
   elements.tradeCountSelect.value = stored.tradeCount ?? 5;
-  elements.tradeLitColorInput.value = stored.tradeLitColor ?? '#2962FF';
-  elements.tradeDarkPoolColorInput.value = stored.tradeDarkPoolColor ?? '#FF9800';
-  elements.tradeThicknessSelect.value = stored.tradeThickness ?? 2;
+  elements.tradeLitColorInput.value = stored.tradeLitColor ?? '#92CBF9';
+  elements.tradeDarkPoolColorInput.value = stored.tradeDarkPoolColor ?? '#F4A460';
+  elements.tradeThicknessSelect.value = stored.tradeThickness ?? 1;
   elements.showOriginalTradeRankToggle.checked = stored.showOriginalTradeRank || false;
   elements.yearRangeSelect.value = stored.yearRange ?? 5;
   elements.clusteringToggle.checked = stored.clusteringEnabled !== false; // Default true
@@ -298,9 +298,9 @@ async function fetchAndDrawTrades() {
 
   try {
     const tradeCount = parseInt(elements.tradeCountSelect?.value, 10) || 5;
-    const tradeLitColor = normalizeColorForDraw(elements.tradeLitColorInput?.value, '#2962FF');
-    const tradeDarkPoolColor = normalizeColorForDraw(elements.tradeDarkPoolColorInput?.value, '#FF9800');
-    const tradeThickness = parseInt(elements.tradeThicknessSelect?.value, 10) || 2;
+    const tradeLitColor = normalizeColorForDraw(elements.tradeLitColorInput?.value, '#92CBF9');
+    const tradeDarkPoolColor = normalizeColorForDraw(elements.tradeDarkPoolColorInput?.value, '#F4A460');
+    const tradeThickness = parseInt(elements.tradeThicknessSelect?.value, 10) || 1;
     const showOriginalTradeRank = elements.showOriginalTradeRankToggle?.checked || false;
     const tradeLabelPosition = elements.tradeLabelPositionSelect?.value || 'right';
 

@@ -130,7 +130,8 @@ test('DRAW_NOTE creates a horizontal ray from the actual trade timestamp', async
   assert.deepEqual(plain(createShapeCalls[0].point), { price: 123.45, time: 1712345678 });
   assert.equal(createShapeCalls[0].config.shape, 'horizontal_ray');
   assert.equal(createShapeCalls[0].config.text, '● VL #2 $250M');
-  assert.equal(createShapeCalls[0].config.overrides.linecolor, 'rgba(255, 152, 0, 1)');
+  assert.equal(createShapeCalls[0].config.overrides.linecolor, 'rgba(244, 164, 96, 1)');
+  assert.equal(createShapeCalls[0].config.overrides.linewidth, 1);
   assert.equal(createShapeCalls[0].config.overrides.showLabel, true);
 });
 

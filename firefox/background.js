@@ -510,7 +510,7 @@ async function fetchAndDraw(symbol, tabId = null, drawOptions = {}) {
   // Step 1: Fetch the levels
   const fetchResult = await fetchVlLevels(symbol);
 
-  if (!fetchResult.success || fetchResult.levels.length === 0) {
+  if (!fetchResult.success) {
     return fetchResult;
   }
 
@@ -542,6 +542,7 @@ async function fetchAndDraw(symbol, tabId = null, drawOptions = {}) {
 
       const drawResponse = await browser.tabs.sendMessage(tabId, {
         type: 'DRAW_LEVELS',
+        symbol,
         levels: drawablesWithLabels,
         options: {
           color: drawOptions.color || '#02A9DE',
@@ -826,7 +827,7 @@ async function fetchAndDrawTrades(symbol, tabId = null, tradeCount = 5, drawOpti
 
   const fetchResult = await fetchVlTrades(symbol, tradeCount, visibleRange);
 
-  if (!fetchResult.success || fetchResult.trades.length === 0) {
+  if (!fetchResult.success) {
     return fetchResult;
   }
 
@@ -836,6 +837,7 @@ async function fetchAndDrawTrades(symbol, tabId = null, tradeCount = 5, drawOpti
 
       const drawResponse = await browser.tabs.sendMessage(tabId, {
         type: 'DRAW_NOTES',
+        symbol,
         trades: fetchResult.trades,
         options: drawOptions || {}
       });

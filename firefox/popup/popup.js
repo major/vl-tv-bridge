@@ -267,9 +267,8 @@ const elements = {
   status: document.getElementById('status'),
   statusMain: document.getElementById('status-main'),
   statusTip: document.getElementById('status-tip'),
-  tvStatus: document.getElementById('tv-status'),
-  vlStatus: document.getElementById('vl-status'),
-  vlLoginHint: document.getElementById('vl-login-hint'),
+  tvLight: document.getElementById('tv-light'),
+  vlLight: document.getElementById('vl-light'),
   openVlBtn: document.getElementById('open-vl-btn'),
   chartSymbol: document.getElementById('chart-symbol'),
   fetchDrawBtn: document.getElementById('fetch-draw-btn'),
@@ -344,20 +343,20 @@ async function checkTradingView(tab) {
   const isTradingView = tab?.url?.includes('tradingview.com');
 
   if (!isTradingView) {
-    setCheckRow(elements.tvStatus, 'not-ready', 'Open a TradingView chart');
+    setLight(elements.tvLight, 'not-ready', 'Open a TradingView chart');
     showChartSymbol('Open a TradingView chart', true);
     tvReady = false;
     return;
   }
 
-  setCheckRow(elements.tvStatus, 'checking', 'Checking chart...');
+  setLight(elements.tvLight, 'checking', 'Checking chart...');
 
   try {
     const readyResponse = await browser.tabs.sendMessage(currentTabId, { type: 'CHECK_TV_READY' });
 
     if (readyResponse?.ready) {
       tvReady = true;
-      setCheckRow(elements.tvStatus, 'ready', 'TradingView chart open');
+      setLight(elements.tvLight, 'ready', 'TradingView chart open');
 
       const symbolResponse = await browser.tabs.sendMessage(currentTabId, { type: 'GET_CURRENT_SYMBOL' });
       if (symbolResponse?.symbol) {
@@ -368,13 +367,13 @@ async function checkTradingView(tab) {
       }
     } else {
       tvReady = false;
-      setCheckRow(elements.tvStatus, 'not-ready', 'Wait for chart to load');
+      setLight(elements.tvLight, 'not-ready', 'Wait for chart to load');
       showChartSymbol('Wait for chart to load', true);
     }
   } catch (err) {
     console.error('Failed to check TV status:', err);
     tvReady = false;
-    setCheckRow(elements.tvStatus, 'not-ready', 'Refresh the TradingView page');
+    setLight(elements.tvLight, 'not-ready', 'Refresh the TradingView page');
     showChartSymbol('Refresh the TradingView page', true);
   }
 }
@@ -389,28 +388,33 @@ function showChartSymbol(text, isEmpty) {
  * Checks VolumeLeaders login status and shows a login link when it is missing.
  */
 async function checkVlAuth() {
-  setCheckRow(elements.vlStatus, 'checking', 'Checking VL login...');
-  elements.vlLoginHint.classList.add('hidden');
+  setLight(elements.vlLight, 'checking', 'Checking VL login...');
+  elements.openVlBtn.classList.add('hidden');
 
   try {
     const response = await browser.runtime.sendMessage({ type: 'CHECK_VL_AUTH' });
     if (response?.authenticated) {
-      setCheckRow(elements.vlStatus, 'ready', 'Logged in to VL');
+      setLight(elements.vlLight, 'ready', 'Logged in to VL');
     } else {
-      setCheckRow(elements.vlStatus, 'unverified', 'Log in to VolumeLeaders');
-      elements.vlLoginHint.classList.remove('hidden');
+      setLight(elements.vlLight, 'not-ready', 'Log in to VolumeLeaders');
+      elements.openVlBtn.classList.remove('hidden');
     }
   } catch (err) {
     console.error('Failed to check VL auth:', err);
-    setCheckRow(elements.vlStatus, 'unverified', 'Log in to VolumeLeaders');
-    elements.vlLoginHint.classList.remove('hidden');
+    setLight(elements.vlLight, 'not-ready', 'Log in to VolumeLeaders');
+    elements.openVlBtn.classList.remove('hidden');
   }
 }
 
-/** Sets the state class and text of a setup checklist row. */
-function setCheckRow(row, state, text) {
-  row.className = `check-row ${state}`;
-  row.querySelector('.text').textContent = text;
+/**
+ * Sets the state class and accessible name of a status light. The full state
+ * text becomes both the hover tooltip (`title`) and the screen-reader label
+ * (`aria-label`), since the visible row only shows a dot and a short code.
+ */
+function setLight(light, state, text) {
+  light.className = `light ${state}`;
+  light.title = text;
+  light.setAttribute('aria-label', text);
 }
 
 /**

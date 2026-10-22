@@ -86,23 +86,27 @@ body {
   font-weight: 400;
 }
 
-/* Setup checklist */
-.checklist {
-  background: var(--bg-raised);
-  border-radius: 8px;
-  padding: 10px 12px;
-  margin-bottom: 10px;
-}
-
-.check-row {
+/* Setup status: one compact row for TV/VL readiness and the chart symbol */
+.status-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
-  padding: 4px 0;
+  background: var(--bg-raised);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
   font-size: 12px;
 }
 
-.check-row .indicator {
+.status-lights {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.light {
   width: 8px;
   height: 8px;
   border-radius: 50%;
@@ -110,26 +114,22 @@ body {
   flex-shrink: 0;
 }
 
-.check-row.ready .indicator {
+.light.ready {
   background: var(--success);
   box-shadow: 0 0 6px var(--success);
 }
 
-.check-row.not-ready .indicator {
+.light.not-ready {
   background: var(--danger);
 }
 
-.check-row.unverified .indicator {
-  background: var(--fg-faint);
-}
-
-.check-row.checking .indicator {
+.light.checking {
   background: var(--warning);
   animation: pulse 1s infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .check-row.checking .indicator {
+  .light.checking {
     animation: none;
   }
 }
@@ -146,33 +146,32 @@ body {
   }
 }
 
-.check-label {
+.light-label {
   font-weight: 600;
   color: var(--fg-muted);
-  flex-shrink: 0;
 }
 
-.check-row .text {
-  color: var(--fg);
-}
-
-.hint {
-  padding: 4px 0 0 16px;
+.light-sep {
+  color: var(--fg-faint);
+  padding: 0 1px;
 }
 
 /* Chart symbol */
 .chart-symbol {
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--accent);
-  text-align: center;
-  padding: 6px 0 10px;
-  min-height: 24px;
+  text-align: right;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .chart-symbol.empty {
   color: var(--fg-faint);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: normal;
 }
 
@@ -270,12 +269,15 @@ body {
 .btn.link {
   background: none;
   color: var(--accent);
-  padding: 2px 0;
+  padding: 0;
+  margin-left: 2px;
   font-size: 11px;
+  white-space: nowrap;
   text-decoration: underline;
 }
 
 .btn:focus-visible,
+.light:focus-visible,
 .tab:focus-visible,
 .segment input:focus-visible+span,
 select:focus-visible,

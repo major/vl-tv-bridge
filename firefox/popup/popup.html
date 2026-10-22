@@ -14,24 +14,18 @@
       <span id="version" class="version"></span>
     </header>
 
-    <!-- Setup checklist -->
-    <section class="checklist">
-      <div id="tv-status" class="check-row">
-        <span class="indicator"></span>
-        <span class="check-label">Step 1</span>
-        <span class="text">Checking TradingView...</span>
-      </div>
-      <div id="vl-status" class="check-row">
-        <span class="indicator"></span>
-        <span class="check-label">Step 2</span>
-        <span class="text">Checking VL login...</span>
-      </div>
-      <div id="vl-login-hint" class="hint hidden">
-        <button id="open-vl-btn" class="btn link">Log in to VolumeLeaders ↗</button>
-      </div>
+    <!-- Setup status: one compact row for TV/VL readiness and the chart symbol -->
+    <section id="status-row" class="status-row" aria-live="polite">
+      <span class="status-lights">
+        <span id="tv-light" class="light" tabindex="0"></span>
+        <span class="light-label">TV</span>
+        <span class="light-sep">·</span>
+        <span id="vl-light" class="light" tabindex="0"></span>
+        <span class="light-label">VL</span>
+        <button id="open-vl-btn" class="btn link hidden">Log in ↗</button>
+      </span>
+      <span id="chart-symbol" class="chart-symbol"></span>
     </section>
-
-    <div id="chart-symbol" class="chart-symbol"></div>
 
     <!-- Main actions -->
     <section class="actions">

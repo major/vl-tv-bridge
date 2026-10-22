@@ -7,14 +7,43 @@ const vm = require('node:vm');
 const SYMBOL_STRING = '={"adjustment":"splits","currency-id":"USD","symbol":"NASDAQ:AMD"}';
 const PLOT_TIMESTAMP = 1611585000; // 2021-01-25T14:30:00.000Z
 
-/** Build a fake chart with shapes, line tool alert state, and main series state. */
+/**
+ * Build a fake chart with shapes, line tool alert state, and main series state.
+ * Each line tool records alert binding calls in `chart.bindingCalls` and keeps its linked
+ * alert id, which can be seeded with `options.linkedAlerts`.
+ */
 function createAlertChart(shapes = {}, options = {}) {
   const texts = new Map(Object.entries(shapes));
+  const linkedAlerts = new Map(Object.entries(options.linkedAlerts || {}));
+  const bindingCalls = [];
+  // The facade only "knows" an alert after `facadePollsBeforeKnown` lookups, like a late push event.
+  let facadePolls = 0;
+  const facadeKnows = () => !options.facadeNeverKnows && facadePolls > (options.facadePollsBeforeKnown || 0);
+  const facade = {
+    getAlertSync() {
+      facadePolls++;
+      return facadeKnows() ? {} : null;
+    }
+  };
+  const bindingMethods = id => ({
+    alertId: () => linkedAlerts.get(id),
+    async setAlert(alertId) {
+      if (options.failSetAlert) throw new Error('bind failed');
+      bindingCalls.push(['setAlert', id, alertId]);
+      // TradingView silently unlinks the line when its alert list does not know the alert yet.
+      if (facadeKnows()) linkedAlerts.set(id, alertId);
+    },
+    removeAlert() {
+      bindingCalls.push(['removeAlert', id, linkedAlerts.get(id)]);
+      linkedAlerts.delete(id);
+    }
+  });
   const model = {
     getLineToolById(id) {
       if (options.missingLineTool === id) return null;
       const plotOverrides = (options.plotOverrides && options.plotOverrides[id]) || {};
       return {
+        ...(options.noBindingMethods ? {} : bindingMethods(id)),
         toolname: 'LineToolHorzRay',
         idForAlert: () => (options.drawingIds && options.drawingIds[id]) || `drawing-${id}`,
         stateForAlertAsync: async () => ({
@@ -36,11 +65,13 @@ function createAlertChart(shapes = {}, options = {}) {
         })
       };
     },
+    chartAlertsFacade: () => (options.noFacade ? null : facade),
     mainSeries: () => ({
       stateForAlertAsync: async () => ({ symbolString: SYMBOL_STRING, interval: '1W' })
     })
   };
   return {
+    bindingCalls,
     symbol: () => 'NASDAQ:AMD',
     resolution: () => '1W',
     getShapeById(id) {
@@ -111,6 +142,8 @@ function loadInjected(chart, { pathname = '/chart/RQKT80iA/AMD/', fetch } = {}) 
     console: quietConsole,
     window,
     fetch,
+    // Run polling delays right away so tests stay fast.
+    setTimeout: callback => Promise.resolve().then(callback),
     TradingViewApi: { activeChart: () => chart }
   });
   const script = fs.readFileSync(path.join(__dirname, '..', 'firefox', 'injected.js'), 'utf8');
@@ -246,6 +279,89 @@ test('creates an alert for each new desired item and returns its record', async 
     errors: [],
     skippedDetails: []
   });
+  assert.deepEqual(plain(chart.bindingCalls), [
+    ['setAlert', 'shape-1', 9001],
+    ['setAlert', 'shape-2', 9002]
+  ]);
+});
+
+test('waits for TradingView to learn about a new alert before linking the line', async () => {
+  const chart = createAlertChart({ 'shape-1': '● VL #1 $214M' }, { facadePollsBeforeKnown: 3 });
+  const fetchState = createPricealertsFetch();
+  const injected = loadInjected(chart, { fetch: fetchState.fetch });
+  const context = await getContext(injected);
+
+  const response = await syncAlerts(injected, context, [{ shapeId: 'shape-1', price: 214 }]);
+
+  assert.equal(response.error, null);
+  assert.equal(response.result.success, true);
+  assert.deepEqual(plain(chart.bindingCalls), [['setAlert', 'shape-1', 9001]]);
+});
+
+for (const [name, chartOptions, reason] of [
+  ['setAlert throws', { failSetAlert: true }, 'bind failed'],
+  ['setAlert is missing', { noBindingMethods: true }, 'TradingView alert internals unavailable: setAlert'],
+  ['the alerts facade is missing', { noFacade: true }, 'TradingView alert internals unavailable: alerts facade'],
+  ['TradingView never learns about the alert', { facadeNeverKnows: true }, 'TradingView did not load alert 9001 in time']
+]) {
+  test(`keeps the created record and reports an error when ${name}`, async () => {
+    const chart = createAlertChart({ 'shape-1': '● VL #1 $214M' }, chartOptions);
+    const fetchState = createPricealertsFetch();
+    const injected = loadInjected(chart, { fetch: fetchState.fetch });
+    const context = await getContext(injected);
+
+    const response = await syncAlerts(injected, context, [{ shapeId: 'shape-1', price: 214 }]);
+
+    assert.equal(response.error, null);
+    const result = plain(response.result);
+    assert.equal(result.success, false);
+    assert.equal(result.created, 1);
+    assert.equal(result.failed, 0);
+    assert.deepEqual(result.records, [record(9001, 'shape-1', 214, 'VL #1 $214M')]);
+    assert.deepEqual(result.errors, [`Shape shape-1: alert 9001 created but not linked to the line: ${reason}`]);
+  });
+}
+
+for (const [name, linkedAlerts, expectedCalls] of [
+  ['re-links a kept alert when the line lost its link', {}, [['setAlert', 'shape-1', 77]]],
+  ['leaves a kept alert alone when the line is already linked', { 'shape-1': 77 }, []]
+]) {
+  test(name, async () => {
+    const chart = createAlertChart({ 'shape-1': '● VL #1 $214M' }, { linkedAlerts });
+    const fetchState = createPricealertsFetch({ alerts: [shapeAlert(77, 'drawing-shape-1')] });
+    const injected = loadInjected(chart, { fetch: fetchState.fetch });
+    const context = await getContext(injected);
+
+    const response = await syncAlerts(injected, context, [{ shapeId: 'shape-1', price: 214 }],
+      [record(77, 'shape-1', 214, 'VL #1 $214M')]);
+
+    assert.equal(response.error, null);
+    assert.equal(response.result.kept, 1);
+    assert.deepEqual(plain(chart.bindingCalls), expectedCalls);
+  });
+}
+
+test('unlinks a still-drawn line from its deleted alert but keeps a newer link', async () => {
+  const chart = createAlertChart({ 'shape-1': '● VL #1 $214M', 'shape-2': '● VL #2 $120M' },
+    { linkedAlerts: { 'shape-1': 66, 'shape-2': 67 } });
+  const fetchState = createPricealertsFetch({
+    alerts: [shapeAlert(66, 'drawing-shape-1'), shapeAlert(67, 'drawing-shape-2')]
+  });
+  const injected = loadInjected(chart, { fetch: fetchState.fetch });
+  const context = await getContext(injected);
+
+  // shape-1 moved price, so 66 is replaced by a new alert; shape-2 is no longer desired.
+  const response = await syncAlerts(injected, context, [{ shapeId: 'shape-1', price: 215 }], [
+    record(66, 'shape-1', 214, 'VL #1 $214M'),
+    record(67, 'shape-2', 120, 'VL #2 $120M')
+  ]);
+
+  assert.equal(response.error, null);
+  assert.equal(response.result.deleted, 2);
+  assert.deepEqual(plain(chart.bindingCalls), [
+    ['setAlert', 'shape-1', 9001],
+    ['removeAlert', 'shape-2', 67]
+  ]);
 });
 
 test('keeps a record whose alert, shape, price, and message still match without creating again', async () => {

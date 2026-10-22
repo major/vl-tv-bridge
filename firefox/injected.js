@@ -937,13 +937,381 @@
     return { success: true, results, removed, records: Array.from(desiredRecordsById.values()) };
   }
 
-  let reconciliationQueue = Promise.resolve();
+  let drawingQueue = Promise.resolve();
 
-  /** Run reconciliation requests in arrival order to keep chart state deterministic. */
-  function enqueueReconciliation(data) {
-    const queued = reconciliationQueue.then(() => reconcileDrawings(data));
-    reconciliationQueue = queued.catch(() => undefined);
+  /** Run drawing and alert work in arrival order so chart state and alerts never interleave. */
+  function enqueueDrawingWork(task) {
+    const queued = drawingQueue.then(task);
+    drawingQueue = queued.catch(() => undefined);
     return queued;
+  }
+
+  /*
+   * Price alert sync.
+   *
+   * NOTE: The chart model paths, line tool state, and pricealerts endpoints below come from
+   * TradingView's bundled JS. They may break when TradingView updates, and each failure
+   * is reported per item instead of crashing the whole sync.
+   */
+  const PRICE_ALERTS_BASE_URL = 'https://pricealerts.tradingview.com';
+
+  /** Return a readable message for any thrown value. */
+  function describeError(error) {
+    return error && error.message ? error.message : String(error);
+  }
+
+  /** Return whether a value can identify a chart shape. */
+  function isShapeId(value) {
+    return typeof value === 'string' || typeof value === 'number';
+  }
+
+  /** Strip the "● " or "◆ " marker that trade rays put in front of their label. */
+  function alertMessageFromText(text) {
+    return text.replace(/^(?:●|◆) /, '');
+  }
+
+  /** Read the alert message for a shape from its current text, failing if the shape is missing. */
+  function alertMessageForShape(chart, shapeId) {
+    const shape = chart.getShapeById(shapeId);
+    const text = shape && typeof shape.getProperties === 'function' ? shape.getProperties().text : undefined;
+    if (typeof text !== 'string' || !text) throw new Error(`Shape ${shapeId} is missing or has no text`);
+    return alertMessageFromText(text);
+  }
+
+  /** Map each drawing id referenced by the conditions of the given alerts to the alert id that uses it. */
+  function collectAlertDrawingIds(alerts) {
+    const ids = new Map();
+    for (const alert of alerts) {
+      const conditions = Array.isArray(alert.conditions) ? alert.conditions : [alert.condition];
+      for (const condition of conditions) {
+        for (const series of (condition && condition.series) || []) {
+          if (series.drawing_id !== undefined && !ids.has(series.drawing_id)) ids.set(series.drawing_id, alert.alert_id);
+        }
+      }
+    }
+    return ids;
+  }
+
+  /** Plot fields that the create_alert payload sends as numbers. */
+  const ALERT_PLOT_FIELDS = ['timestamp', 'offset1', 'offset2', 'price1', 'price2'];
+
+  /** Throw before sending when TradingView has not filled in a plot number yet. */
+  function assertPlotReady(plot) {
+    for (const field of ALERT_PLOT_FIELDS) {
+      if (!Number.isFinite(plot[field])) {
+        throw new Error(`TradingView line not ready for alerts: ${field}=${plot[field]}`);
+      }
+    }
+  }
+
+  /**
+   * Build the create_alert payload in the same shape TradingView's own alert dialog sends.
+   * The plot timestamp is in seconds, so base_time is converted to an ISO string.
+   * Throws instead of building a payload when a plot number is not finite.
+   */
+  function buildCreateAlertPayload({ lineState, mainState, drawingId, tool, layoutId, message, resolution }) {
+    const plot = lineState.plots[0];
+    assertPlotReady(plot);
+    return {
+      conditions: [{
+        type: 'cross',
+        frequency: 'on_first_fire',
+        series: [
+          { type: 'barset' },
+          {
+            type: 'line',
+            tool,
+            base_time: new Date(plot.timestamp * 1000).toISOString(),
+            offset1: plot.offset1,
+            price1: plot.price1,
+            offset2: plot.offset2,
+            price2: plot.price2,
+            extend_forward: plot.extendForward,
+            extend_backward: plot.extendBackward,
+            drawing_id: drawingId,
+            layout_id: layoutId
+          }
+        ],
+        resolution
+      }],
+      symbol: mainState.symbolString,
+      resolution,
+      message,
+      sound_file: 'alert/fired',
+      sound_duration: 0,
+      popup: true,
+      auto_deactivate: false,
+      email: true,
+      sms_over_email: false,
+      mobile_push: true,
+      web_hook: null,
+      name: null,
+      expiration_policy: { policy: 'never' },
+      active: true,
+      ignore_warnings: true
+    };
+  }
+
+  /**
+   * Call a pricealerts endpoint with the user's TradingView cookies.
+   * Without a payload this sends GET. With a payload it sends POST with `{ payload }` as text/plain JSON.
+   */
+  async function pricealertsRequest(path, payload) {
+    const init = { method: 'GET', credentials: 'include' };
+    if (payload !== undefined) {
+      init.method = 'POST';
+      init.headers = { 'Content-Type': 'text/plain;charset=UTF-8' };
+      init.body = JSON.stringify({ payload });
+    }
+    const response = await fetch(`${PRICE_ALERTS_BASE_URL}${path}`, init);
+    let body = null;
+    try {
+      body = await response.json();
+    } catch (error) {
+      body = null;
+    }
+    if (!response.ok || !body || body.s !== 'ok') {
+      throw new Error((body && (body.errmsg || body.err)) || `${path} failed with HTTP ${response.status}`);
+    }
+    return body;
+  }
+
+  /** Fetch every price alert on the account. */
+  async function listAlerts() {
+    const body = await pricealertsRequest('/list_alerts');
+    if (!Array.isArray(body.r)) throw new Error('list_alerts response is malformed');
+    return body.r;
+  }
+
+  /** Create one price alert from a payload and return the new alert id. */
+  async function createPriceAlert(payload) {
+    const body = await pricealertsRequest('/create_alert', payload);
+    if (!body.r || body.r.alert_id === undefined) throw new Error('create_alert response has no alert_id');
+    return body.r.alert_id;
+  }
+
+  /** Delete alerts by id in one request. */
+  async function deletePriceAlerts(alertIds) {
+    await pricealertsRequest('/delete_alerts', { alert_ids: alertIds });
+  }
+
+  /** Return TradingView's chart model, failing clearly when its internal path has changed. */
+  function tradingViewModel(chart) {
+    const widget = chart._chartWidget;
+    const model = widget && typeof widget.model === 'function' ? widget.model() : null;
+    const inner = model && typeof model.model === 'function' ? model.model() : null;
+    if (!inner) throw new Error('TradingView alert internals unavailable: chart model');
+    return inner;
+  }
+
+  /** Pick the drawing id TradingView's alert engine uses, falling back to the shape id. */
+  function alertDrawingId(source, shapeId) {
+    for (const method of ['idForAlert', 'id']) {
+      if (typeof source[method] === 'function') {
+        const id = source[method]();
+        if (id) return id;
+      }
+    }
+    return shapeId;
+  }
+
+  /** Read the line tool's alert state, tool name, and drawing id for one shape. */
+  async function readLineTool(chart, shapeId) {
+    const model = tradingViewModel(chart);
+    const source = typeof model.getLineToolById === 'function' ? model.getLineToolById(shapeId) : null;
+    if (!source || typeof source.stateForAlertAsync !== 'function') {
+      throw new Error('TradingView alert internals unavailable: line tool');
+    }
+    if (typeof source.toolname !== 'string') throw new Error('TradingView alert internals unavailable: tool name');
+    const lineState = await source.stateForAlertAsync();
+    const plot = lineState && Array.isArray(lineState.plots) ? lineState.plots[0] : null;
+    if (!plot || plot.type !== 'LinePlot') {
+      throw new Error('TradingView alert internals unavailable: line plot');
+    }
+    return { lineState, tool: source.toolname, drawingId: alertDrawingId(source, shapeId) };
+  }
+
+  /** Read the main series alert state, which holds the symbol string. */
+  async function readMainSeriesState(chart) {
+    const model = tradingViewModel(chart);
+    const mainSeries = typeof model.mainSeries === 'function' ? model.mainSeries() : null;
+    if (!mainSeries || typeof mainSeries.stateForAlertAsync !== 'function') {
+      throw new Error('TradingView alert internals unavailable: main series');
+    }
+    const state = await mainSeries.stateForAlertAsync();
+    if (!state || typeof state.symbolString !== 'string') {
+      throw new Error('TradingView alert internals unavailable: symbol');
+    }
+    return state;
+  }
+
+  /** Read the layout id from the chart URL, such as /chart/<layoutId>/. */
+  function layoutIdFromPath(pathname) {
+    const match = /\/chart\/([^/]+)/.exec(pathname);
+    if (!match) throw new Error('TradingView alert internals unavailable: layout id');
+    return match[1];
+  }
+
+  /** Resolve the alert timeframe from the main series, then the line tool, then the chart. */
+  function alertResolution(chart, mainState, lineState) {
+    let resolution = mainState.interval || lineState.interval;
+    if (!resolution && typeof chart.resolution === 'function') resolution = chart.resolution();
+    if (!resolution) throw new Error('TradingView alert internals unavailable: resolution');
+    return resolution;
+  }
+
+  /** Read TradingView's alert state for a shape and build the matching create_alert payload. */
+  async function readCreateAlertPayload(chart, shapeId, message) {
+    const layoutId = layoutIdFromPath(window.location.pathname);
+    const line = await readLineTool(chart, shapeId);
+    const mainState = await readMainSeriesState(chart);
+    const payload = buildCreateAlertPayload({
+      lineState: line.lineState,
+      mainState,
+      drawingId: line.drawingId,
+      tool: line.tool,
+      layoutId,
+      message,
+      resolution: alertResolution(chart, mainState, line.lineState)
+    });
+    return { drawingId: line.drawingId, payload };
+  }
+
+  /** Check that a request item names a shape and a finite price. */
+  function validateAlertItem(item, index) {
+    if (!item || !isShapeId(item.shapeId) || !Number.isFinite(item.price)) {
+      throw new Error(`Alert item ${index} is malformed`);
+    }
+  }
+
+  /** Check that a stored alert record has the fields the sync needs. */
+  function validateAlertRecord(record, index) {
+    if (!record || typeof record.alertId !== 'number' || !isShapeId(record.shapeId) ||
+        !Number.isFinite(record.price) || typeof record.message !== 'string') {
+      throw new Error(`Alert record ${index} is malformed`);
+    }
+  }
+
+  /** Validate a SYNC_ALERTS request before any chart read or network call. */
+  function validateAlertSyncRequest(data) {
+    if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Alert sync request is malformed');
+    if (data.kind !== 'levels' && data.kind !== 'trades') throw new Error('Alert sync kind must be levels or trades');
+    if (!data.context || typeof data.context.key !== 'string') throw new Error('Drawing context is required');
+    if (!Array.isArray(data.desired)) throw new Error('Alert desired items must be an array');
+    if (!Array.isArray(data.records)) throw new Error('Alert records must be an array');
+    data.desired.forEach(validateAlertItem);
+    data.records.forEach(validateAlertRecord);
+  }
+
+  /** Pair a desired item with its alert message, or keep the reason its message cannot be read. */
+  function alertTarget(chart, item) {
+    try {
+      return { item, message: alertMessageForShape(chart, item.shapeId) };
+    } catch (error) {
+      return { item, error: describeError(error) };
+    }
+  }
+
+  /** Return whether a stored record still describes this desired item. */
+  function recordMatchesTarget(record, target) {
+    return record.shapeId === target.item.shapeId &&
+      record.price === target.item.price &&
+      record.message === target.message;
+  }
+
+  /**
+   * Sync TradingView price alerts for one kind of drawn items.
+   * Keeps matching records, creates missing alerts, and deletes only alerts this extension recorded.
+   */
+  async function syncAlerts(data) {
+    validateAlertSyncRequest(data);
+    const { context, desired, records } = data;
+    assertDrawingContext(context.key);
+    const chart = getChartApi();
+
+    const summary = { created: 0, deleted: 0, kept: 0, skipped: 0, failed: 0 };
+    const errors = [];
+    const skippedDetails = [];
+    const finish = outputRecords => ({
+      success: errors.length === 0,
+      ...summary,
+      records: outputRecords,
+      errors,
+      skippedDetails
+    });
+
+    let alerts;
+    try {
+      alerts = await listAlerts();
+    } catch (error) {
+      errors.push(describeError(error));
+      return finish(records);
+    }
+
+    const existingIds = new Set(alerts.map(alert => alert.alert_id));
+    const liveRecords = records.filter(record => existingIds.has(record.alertId));
+    const targets = desired.map(item => alertTarget(chart, item));
+    const keptRecords = [];
+    for (const target of targets) {
+      const record = target.error ? undefined : liveRecords.find(candidate => recordMatchesTarget(candidate, target));
+      if (record) {
+        target.kept = true;
+        keptRecords.push(record);
+        summary.kept++;
+      }
+    }
+
+    // Stale records are excluded from the manual-alert check so a changed price can be re-created this sync.
+    const staleRecords = liveRecords.filter(record => !keptRecords.includes(record));
+    const staleAlertIds = new Set(staleRecords.map(record => record.alertId));
+    const manualAlertIds = collectAlertDrawingIds(alerts.filter(alert => !staleAlertIds.has(alert.alert_id)));
+
+    const createdRecords = [];
+    for (const target of targets) {
+      const { shapeId, price } = target.item;
+      if (target.kept) continue;
+      if (target.error) {
+        summary.failed++;
+        errors.push(`Shape ${shapeId}: ${target.error}`);
+        console.warn('🔔 VL alert', { shapeId, message: undefined, reason: target.error });
+        continue;
+      }
+      try {
+        const { drawingId, payload } = await readCreateAlertPayload(chart, shapeId, target.message);
+        if (manualAlertIds.has(drawingId)) {
+          const alertId = manualAlertIds.get(drawingId);
+          summary.skipped++;
+          skippedDetails.push({ shapeId, message: target.message, alertId });
+          console.warn('🔔 VL alert', {
+            shapeId,
+            message: target.message,
+            reason: `drawing already has an alert ${alertId}`
+          });
+          continue;
+        }
+        console.log('🔔 VL alert create', { shapeId, message: target.message, line: payload.conditions[0].series[1] });
+        const alertId = await createPriceAlert(payload);
+        createdRecords.push({ alertId, shapeId, price, message: target.message });
+        summary.created++;
+      } catch (error) {
+        const reason = describeError(error);
+        summary.failed++;
+        errors.push(`Shape ${shapeId}: ${reason}`);
+        console.warn('🔔 VL alert', { shapeId, message: target.message, reason });
+      }
+    }
+
+    let retainedRecords = [];
+    if (staleRecords.length) {
+      try {
+        await deletePriceAlerts(staleRecords.map(record => record.alertId));
+        summary.deleted = staleRecords.length;
+      } catch (error) {
+        errors.push(`Could not delete alerts: ${describeError(error)}`);
+        retainedRecords = staleRecords;
+      }
+    }
+    return finish([...keptRecords, ...createdRecords, ...retainedRecords]);
   }
 
   /**
@@ -974,7 +1342,11 @@
           break;
 
         case 'RECONCILE_DRAWINGS':
-          result = await enqueueReconciliation(data);
+          result = await enqueueDrawingWork(() => reconcileDrawings(data));
+          break;
+
+        case 'SYNC_ALERTS':
+          result = await enqueueDrawingWork(() => syncAlerts(data));
           break;
 
         case 'DRAW_LINE':

@@ -164,6 +164,21 @@
             </div>
           </div>
 
+          <div class="panel-section">
+            <div class="panel-title">Alerts</div>
+
+            <div class="setting-row">
+              <label for="level-alert-scope-select" class="setting-label">🔔 Alerts</label>
+              <select id="level-alert-scope-select" class="setting-select">
+                <option value="off" selected>Off</option>
+                <option value="top1">Top level</option>
+                <option value="top3">Top 3 levels</option>
+                <option value="all">All levels</option>
+              </select>
+            </div>
+            <div class="setting-hint">Adds TradingView alerts to the best-ranked levels drawn on the chart. Alerts sync when you redraw or clear.</div>
+          </div>
+
           <button id="reset-levels-btn" class="btn text">↺ Reset to defaults</button>
         </div>
       </div>
@@ -251,6 +266,21 @@
                 <span id="trade-dark-pool-color-error" class="hex-error hidden">Use a code like #2962FF</span>
               </span>
             </div>
+          </div>
+
+          <div class="panel-section">
+            <div class="panel-title">Alerts</div>
+
+            <div class="setting-row">
+              <label for="trade-alert-scope-select" class="setting-label">🔔 Alerts</label>
+              <select id="trade-alert-scope-select" class="setting-select">
+                <option value="off" selected>Off</option>
+                <option value="top1">Top trade</option>
+                <option value="top3">Top 3 trades</option>
+                <option value="all">All trades</option>
+              </select>
+            </div>
+            <div class="setting-hint">Adds TradingView alerts to the best-ranked trades drawn on the chart. Alerts sync when you redraw or clear.</div>
           </div>
 
           <button id="reset-trades-btn" class="btn text">↺ Reset to defaults</button>

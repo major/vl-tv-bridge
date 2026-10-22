@@ -452,6 +452,14 @@ details[open] summary::before {
   color: var(--fg);
 }
 
+/* Short plain-language note under a setting row, e.g. what Alerts does */
+.setting-hint {
+  font-size: 11px;
+  color: var(--fg-faint);
+  line-height: 1.4;
+  padding: 0 0 2px;
+}
+
 /* Select */
 .setting-select {
   padding: 6px 10px;

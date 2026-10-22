@@ -1115,10 +1115,84 @@
     return shapeId;
   }
 
+  /** Return TradingView's line tool object for a shape, or null when it cannot be found. */
+  function lineToolSource(chart, shapeId) {
+    const model = tradingViewModel(chart);
+    return typeof model.getLineToolById === 'function' ? model.getLineToolById(shapeId) : null;
+  }
+
+  /** How long to wait for TradingView's page alert list to learn about an alert we just created. */
+  const ALERT_KNOWN_POLL_MS = 200;
+  const ALERT_KNOWN_MAX_POLLS = 50;
+
+  /** Resolve after a short delay. */
+  function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Wait until TradingView's chart alerts facade knows an alert id.
+   * Alerts created through the REST API only reach the page's alert list through a later push
+   * event. If a line is linked before that, TradingView decides the alert "does not exist" and
+   * silently unlinks the line again.
+   */
+  async function waitForAlertInChart(chart, alertId) {
+    const model = tradingViewModel(chart);
+    const facade = typeof model.chartAlertsFacade === 'function' ? model.chartAlertsFacade() : null;
+    if (!facade || typeof facade.getAlertSync !== 'function') {
+      throw new Error('TradingView alert internals unavailable: alerts facade');
+    }
+    for (let poll = 0; !facade.getAlertSync(alertId); poll++) {
+      if (poll >= ALERT_KNOWN_MAX_POLLS) throw new Error(`TradingView did not load alert ${alertId} in time`);
+      await delay(ALERT_KNOWN_POLL_MS);
+    }
+  }
+
+  /**
+   * Attach a server-side alert to its line tool, the same way TradingView's alert dialog does.
+   * Without this the line does not know it has an alert: the context menu shows "Add alert",
+   * the layout is saved without `alertId`, and deleting the line neither warns nor deletes the alert.
+   */
+  async function bindAlertToLine(chart, source, alertId) {
+    if (typeof source.setAlert !== 'function') {
+      throw new Error('TradingView alert internals unavailable: setAlert');
+    }
+    await waitForAlertInChart(chart, alertId);
+    await source.setAlert(alertId);
+    if (typeof source.alertId === 'function' && source.alertId() !== alertId) {
+      throw new Error('TradingView dropped the alert link');
+    }
+  }
+
+  /**
+   * Re-attach a kept alert to its line tool when the line lost the link (for example after a
+   * reload of a layout that was saved before the link existed). Failures only log a warning.
+   */
+  async function ensureLineAlertBinding(chart, record) {
+    try {
+      const source = lineToolSource(chart, record.shapeId);
+      if (!source || typeof source.alertId !== 'function' || typeof source.setAlert !== 'function') return;
+      if (source.alertId() === record.alertId) return;
+      await bindAlertToLine(chart, source, record.alertId);
+    } catch (error) {
+      console.warn('🔔 VL alert', { shapeId: record.shapeId, reason: `could not re-link alert: ${describeError(error)}` });
+    }
+  }
+
+  /** Drop the link from a still-drawn line to an alert this sync just deleted. Failures only log a warning. */
+  function unbindDeletedAlert(chart, record) {
+    try {
+      const source = lineToolSource(chart, record.shapeId);
+      if (!source || typeof source.alertId !== 'function' || typeof source.removeAlert !== 'function') return;
+      if (source.alertId() === record.alertId) source.removeAlert();
+    } catch (error) {
+      console.warn('🔔 VL alert', { shapeId: record.shapeId, reason: `could not unlink alert: ${describeError(error)}` });
+    }
+  }
+
   /** Read the line tool's alert state, tool name, and drawing id for one shape. */
   async function readLineTool(chart, shapeId) {
-    const model = tradingViewModel(chart);
-    const source = typeof model.getLineToolById === 'function' ? model.getLineToolById(shapeId) : null;
+    const source = lineToolSource(chart, shapeId);
     if (!source || typeof source.stateForAlertAsync !== 'function') {
       throw new Error('TradingView alert internals unavailable: line tool');
     }
@@ -1128,7 +1202,7 @@
     if (!plot || plot.type !== 'LinePlot') {
       throw new Error('TradingView alert internals unavailable: line plot');
     }
-    return { lineState, tool: source.toolname, drawingId: alertDrawingId(source, shapeId) };
+    return { source, lineState, tool: source.toolname, drawingId: alertDrawingId(source, shapeId) };
   }
 
   /** Read the main series alert state, which holds the symbol string. */
@@ -1174,7 +1248,7 @@
       message,
       resolution: alertResolution(chart, mainState, line.lineState)
     });
-    return { drawingId: line.drawingId, payload };
+    return { source: line.source, drawingId: line.drawingId, payload };
   }
 
   /** Check that a request item names a shape and a finite price. */
@@ -1258,6 +1332,7 @@
         target.kept = true;
         keptRecords.push(record);
         summary.kept++;
+        await ensureLineAlertBinding(chart, record);
       }
     }
 
@@ -1277,7 +1352,7 @@
         continue;
       }
       try {
-        const { drawingId, payload } = await readCreateAlertPayload(chart, shapeId, target.message);
+        const { source, drawingId, payload } = await readCreateAlertPayload(chart, shapeId, target.message);
         if (manualAlertIds.has(drawingId)) {
           const alertId = manualAlertIds.get(drawingId);
           summary.skipped++;
@@ -1291,8 +1366,16 @@
         }
         console.log('🔔 VL alert create', { shapeId, message: target.message, line: payload.conditions[0].series[1] });
         const alertId = await createPriceAlert(payload);
+        // Record the alert before linking so a link failure can never leave an untracked alert behind.
         createdRecords.push({ alertId, shapeId, price, message: target.message });
         summary.created++;
+        try {
+          await bindAlertToLine(chart, source, alertId);
+        } catch (error) {
+          const reason = `alert ${alertId} created but not linked to the line: ${describeError(error)}`;
+          errors.push(`Shape ${shapeId}: ${reason}`);
+          console.warn('🔔 VL alert', { shapeId, message: target.message, reason });
+        }
       } catch (error) {
         const reason = describeError(error);
         summary.failed++;
@@ -1306,6 +1389,7 @@
       try {
         await deletePriceAlerts(staleRecords.map(record => record.alertId));
         summary.deleted = staleRecords.length;
+        staleRecords.forEach(record => unbindDeletedAlert(chart, record));
       } catch (error) {
         errors.push(`Could not delete alerts: ${describeError(error)}`);
         retainedRecords = staleRecords;

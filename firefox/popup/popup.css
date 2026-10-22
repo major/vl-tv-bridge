@@ -590,7 +590,8 @@ details[open] summary::before {
 }
 
 .hex-input {
-  width: 8ch;
+  /* border-box: room for 7 chars + caret, plus 16px padding and 2px border */
+  width: calc(8ch + 18px);
   padding: 6px 8px;
   border: 1px solid var(--border);
   border-radius: 6px;

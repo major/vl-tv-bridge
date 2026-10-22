@@ -3,6 +3,29 @@
 All notable changes to VL-TV Bridge.
 
 
+## [2.0.0](https://github.com/major/vl-tv-bridge/compare/v1.9.0...v2.0.0) (2026-10-22)
+
+* **deps:** lock file maintenance ([#64](https://github.com/major/vl-tv-bridge/issues/64)) ([0b8ad12](https://github.com/major/vl-tv-bridge/commit/0b8ad12d6e7f3744d132a13405ed61a64dcd60d5))
+* **deps:** lock file maintenance ([#66](https://github.com/major/vl-tv-bridge/issues/66)) ([ae70e25](https://github.com/major/vl-tv-bridge/commit/ae70e25d53b303899993b132821b1647dca704ed))
+* **deps:** update actions/setup-node digest to 949feb2 ([#65](https://github.com/major/vl-tv-bridge/issues/65)) ([db41151](https://github.com/major/vl-tv-bridge/commit/db411519c1dada43a4074dfa1b372852777b6dbd))
+* **deps:** update dependency release-it to v21.1.1 ([#67](https://github.com/major/vl-tv-bridge/issues/67)) ([05acf9f](https://github.com/major/vl-tv-bridge/commit/05acf9f98f06d8bebb236343fbf36342e8f43785))
+
+### ✨ Features
+
+* **alerts:** sync TradingView alerts with drawn levels and trades 🔔 ([2dc6f53](https://github.com/major/vl-tv-bridge/commit/2dc6f53b45569e9cd83e7dfae4ade4ccf526077e))
+* **background:** send fetch progress events to popup 📡 ([90564a0](https://github.com/major/vl-tv-bridge/commit/90564a0e6717c824d171661a5e6006395819abd5))
+* **popup:** redesign popup for new users 🎨 ([e76cd81](https://github.com/major/vl-tv-bridge/commit/e76cd81c2f0548b33dde1dfd2ebea14ab039a945))
+* **popup:** shrink setup status to one line 🚦 ([9f4b3bb](https://github.com/major/vl-tv-bridge/commit/9f4b3bb033f19846d6714df330b81f92cc625363))
+* preserve valid level and trade drawings ([868dc70](https://github.com/major/vl-tv-bridge/commit/868dc70631544d660fff3c1eed558b7851fc8a7f))
+* remove level clustering ([3cab0aa](https://github.com/major/vl-tv-bridge/commit/3cab0aac5581a8f2cc19dae0cb184b293dd74f77))
+* update default trade line width and colors ([03d560d](https://github.com/major/vl-tv-bridge/commit/03d560d3fa19e5235c612e05ed5bcc1a9fedb29d)), references [#92CBF9](https://github.com/major/vl-tv-bridge/issues/92CBF9) [#F4A460](https://github.com/major/vl-tv-bridge/issues/F4A460)
+
+### 🐛 Bug Fixes
+
+* **popup:** replace color picker with hex code inputs 🎨 ([bfe8b97](https://github.com/major/vl-tv-bridge/commit/bfe8b97e9e19e761f553d204f677fa4a0e1bcffa))
+* **popup:** use in-popup color picker instead of native dialog 🎨 ([2a426d8](https://github.com/major/vl-tv-bridge/commit/2a426d8a9b3abbb916c45dd14ebc8ff27ea7f61d))
+* **popup:** widen hex color inputs to show the full code ([740add2](https://github.com/major/vl-tv-bridge/commit/740add22c719d45a78b1ecd07815d897288cafd6))
+
 ## [1.9.0](///compare/v1.8.8...v1.9.0) (2026-09-28)
 
 ### Features

@@ -2,6 +2,10 @@
 
 Firefox WebExtension bridging VolumeLeaders trade levels into TradingView chart lines.
 
+## Real browser testing
+I test this frequently in Firefox's about:debugging menu, so always build a zip/xpi when it's time for me to test.
+Store it in this repo (not in a worktree) as build/vl-tv-bridge-VERSION-NUMBER.{zip,xpi}
+
 ## Commands
 
 - `npm test` - run tests

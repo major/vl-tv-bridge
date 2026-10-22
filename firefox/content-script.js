@@ -15,6 +15,9 @@ if (window !== window.top) {
   console.log('🌉 VL-TV Bridge: Content script loaded on TradingView');
 
   const DRAWING_STORAGE_PREFIX = 'vlDrawings:';
+  const ALERT_STORAGE_PREFIX = 'vlAlerts:';
+  const ALERT_SCOPES = ['off', 'top1', 'top3', 'all'];
+  const ALERT_COUNT_KEYS = ['created', 'deleted', 'kept', 'skipped', 'failed'];
   const COUNTRY_SUFFIXES = ['.US', '.UK', '.DE', '.FR', '.JP', '.HK', '.AU', '.CA'];
   let drawingQueue = Promise.resolve();
 
@@ -212,15 +215,15 @@ if (window !== window.top) {
   }
 
   /**
-   * Read stored drawing records for one chart context and category.
+   * Read stored records (drawings or alerts) for one storage key.
    * @param {string} storageKey - The scoped storage key.
-   * @returns {Promise<Array>} Previously saved opaque reconciliation records.
+   * @returns {Promise<Array>} Previously saved opaque records, or an empty array.
    */
-  async function readDrawingRecords(storageKey) {
+  async function readStoredRecords(storageKey) {
     const stored = await browser.storage.local.get(storageKey);
     const records = stored?.[storageKey];
     if (records === undefined) return [];
-    if (!Array.isArray(records)) throw new Error(`Invalid stored drawing records for ${storageKey}`);
+    if (!Array.isArray(records)) throw new Error(`Invalid stored records for ${storageKey}`);
     return records;
   }
 
@@ -257,7 +260,7 @@ if (window !== window.top) {
    */
   async function reconcileDrawings(context, kind, items) {
     const storageKey = getDrawingStorageKey(context, kind);
-    const records = await readDrawingRecords(storageKey);
+    const records = await readStoredRecords(storageKey);
     const coreResponse = await sendToInjected('RECONCILE_DRAWINGS', {
       kind,
       items,
@@ -273,6 +276,131 @@ if (window !== window.top) {
     }
 
     return result;
+  }
+
+  /**
+   * Coerce a stored alert scope setting into a known value.
+   * @param {*} value - The stored scope setting.
+   * @returns {string} One of off, top1, top3, or all. Unknown values mean off.
+   */
+  function normalizeAlertScope(value) {
+    return ALERT_SCOPES.includes(value) ? value : 'off';
+  }
+
+  /** How many of the best-ranked drawn items each limited scope keeps. */
+  const ALERT_SCOPE_LIMITS = { top1: 1, top3: 3 };
+
+  /**
+   * Pick the successfully drawn items that should have alerts for one scope.
+   * Limited scopes keep the best-ranked drawn items by position, not by rank value.
+   * VL level ranks are all-time ranks, so a short lookback can draw #2, #5, #7;
+   * "top3" then means those three, not only all-time #1 to #3.
+   * Items without an integer rank only qualify for the all scope.
+   * @param {Array} results - Merged per-item drawing results.
+   * @param {string} scope - The alert scope setting.
+   * @returns {Array<{shapeId: string, price: number}>} Desired alert targets.
+   */
+  function selectAlertTargets(results, scope) {
+    const normalizedScope = normalizeAlertScope(scope);
+    if (normalizedScope === 'off') return [];
+
+    let drawn = results.filter(result => result.success === true);
+    if (normalizedScope !== 'all') {
+      drawn = drawn
+        .filter(result => Number.isInteger(result.rank))
+        .sort((left, right) => left.rank - right.rank)
+        .slice(0, ALERT_SCOPE_LIMITS[normalizedScope]);
+    }
+    return drawn.map(result => ({ shapeId: result.shapeId, price: result.price }));
+  }
+
+  /**
+   * Build the storage key for one chart context and alert kind.
+   * @param {Object} context - A validated chart context.
+   * @param {string} kind - The drawing category, either levels or trades.
+   * @returns {string} The scoped alert storage key.
+   */
+  function getAlertStorageKey(context, kind) {
+    return `${ALERT_STORAGE_PREFIX}${context.key}:${kind}`;
+  }
+
+  /**
+   * Read the alert scope setting for one drawing category.
+   * @param {string} kind - The drawing category, either levels or trades.
+   * @returns {Promise<string>} The normalized alert scope.
+   */
+  async function readAlertScope(kind) {
+    const scopeKey = kind === 'levels' ? 'levelAlertScope' : 'tradeAlertScope';
+    const stored = await browser.storage.local.get(scopeKey);
+    return normalizeAlertScope(stored?.[scopeKey]);
+  }
+
+  /**
+   * Convert the injected SYNC_ALERTS response into the public alert summary.
+   * @param {Object} syncResult - A non-null object returned by the injected script.
+   * @returns {Object} Alert counts, with error and the first errors when the sync reported failures.
+   */
+  function summarizeAlertResult(syncResult) {
+    const summary = {};
+    for (const key of ALERT_COUNT_KEYS) {
+      summary[key] = Number.isFinite(syncResult[key]) ? syncResult[key] : 0;
+    }
+    if (syncResult.success === true) return summary;
+
+    const errors = Array.isArray(syncResult.errors) ? syncResult.errors.filter(Boolean) : [];
+    return { ...summary, error: errors.join('; ') || 'Alert sync failed', errors: errors.slice(0, 3) };
+  }
+
+  /**
+   * Sync TradingView alerts for one drawing category with the drawings just reconciled.
+   * Never throws: failures are reported in the returned summary only.
+   * Skips the bridge call when alerts are off and nothing is stored.
+   * @param {Object} context - The validated active chart context.
+   * @param {string} kind - The drawing category, either levels or trades.
+   * @param {Array} results - Merged per-item drawing results. Pass [] to delete all tracked alerts.
+   * @returns {Promise<Object>} Alert counts, plus error when the sync failed.
+   */
+  async function syncAlerts(context, kind, results) {
+    const zeroCounts = Object.fromEntries(ALERT_COUNT_KEYS.map(key => [key, 0]));
+    try {
+      const scope = await readAlertScope(kind);
+      const storageKey = getAlertStorageKey(context, kind);
+      const records = await readStoredRecords(storageKey);
+      if (scope === 'off' && records.length === 0) return zeroCounts;
+
+      const syncResult = await sendToInjected('SYNC_ALERTS', {
+        kind,
+        context: { key: context.key },
+        desired: selectAlertTargets(results, scope),
+        records
+      }, 30000);
+      if (!syncResult || typeof syncResult !== 'object') throw new Error('Invalid alert sync response');
+      if (!syncResult.success || syncResult.failed > 0 || syncResult.skipped > 0) console.warn('🔔 VL alert sync', syncResult);
+
+      if (Array.isArray(syncResult.records)) {
+        await browser.storage.local.set({ [storageKey]: syncResult.records });
+      }
+      return summarizeAlertResult(syncResult);
+    } catch (err) {
+      return { ...zeroCounts, error: err.message || 'Could not sync alerts' };
+    }
+  }
+
+  /**
+   * Add several alert summaries into one, joining any error messages.
+   * @param {Array<Object>} summaries - Alert summaries from syncAlerts.
+   * @returns {Object} The combined alert summary.
+   */
+  function combineAlertSummaries(summaries) {
+    const combined = Object.fromEntries(ALERT_COUNT_KEYS.map(key => [key, 0]));
+    const errors = [];
+    const details = [];
+    for (const summary of summaries) {
+      for (const key of ALERT_COUNT_KEYS) combined[key] += summary[key];
+      if (summary.error) errors.push(summary.error);
+      if (Array.isArray(summary.errors)) details.push(...summary.errors);
+    }
+    return errors.length ? { ...combined, error: errors.join('; '), errors: details.slice(0, 3) } : combined;
   }
 
   /**
@@ -327,6 +455,7 @@ if (window !== window.top) {
       type: 'level',
       price: item?.price,
       timestamp: item?.timestamp,
+      rank: item?.rank,
       label: item?.label || `VL ${item?.price}`,
       options: {
         linecolor: options.color || '#02A9DE',
@@ -343,13 +472,15 @@ if (window !== window.top) {
       const successfulResults = results.filter(result => result.success === true);
       const failed = results.filter(result => result.success !== true).length;
       const drawn = successfulResults.length;
+      const alerts = await syncAlerts(context, 'levels', results);
       const response = {
         success: coreResult.success && failed === 0,
         drawn,
         failed,
         levels: successfulResults.filter(result => result.type === 'level').length,
         results,
-        removed: coreResult.removed
+        removed: coreResult.removed,
+        alerts
       };
       if (coreResult.error) response.error = coreResult.error;
       return response;
@@ -387,6 +518,7 @@ if (window !== window.top) {
       const skipped = results.filter(result => result.skipped === true).length;
       const failed = results.filter(result => result.success !== true && result.skipped !== true).length;
       const darkPoolCount = successfulResults.filter(result => result.darkPool).length;
+      const alerts = await syncAlerts(context, 'trades', results);
       const response = {
         success: coreResult.success && failed === 0,
         drawn: successfulResults.length,
@@ -395,7 +527,8 @@ if (window !== window.top) {
         darkPoolCount,
         litCount: successfulResults.length - darkPoolCount,
         results,
-        removed: coreResult.removed
+        removed: coreResult.removed,
+        alerts
       };
       if (coreResult.error) response.error = coreResult.error;
       return response;
@@ -406,6 +539,8 @@ if (window !== window.top) {
 
   /**
    * Clear levels and trades from only the active chart context.
+   * Each cleared category also deletes its tracked alerts; alert failures
+   * are reported in alerts and never change success.
    * @returns {Promise<Object>} The aggregate clear response.
    */
   async function clearDrawnLevels() {
@@ -418,6 +553,7 @@ if (window !== window.top) {
 
     const results = [];
     const errors = [];
+    const alertSummaries = [];
     let removed = 0;
     let success = true;
 
@@ -428,13 +564,14 @@ if (window !== window.top) {
         results.push(...result.results);
         if (!result.success) success = false;
         if (result.error) errors.push(result.error);
+        alertSummaries.push(await syncAlerts(context, kind, []));
       } catch (err) {
         success = false;
         errors.push(err.message || `Could not clear ${kind}`);
       }
     }
 
-    const response = { success, removed, results };
+    const response = { success, removed, results, alerts: combineAlertSummaries(alertSummaries) };
     if (errors.length) response.error = errors.join('; ');
     return response;
   }

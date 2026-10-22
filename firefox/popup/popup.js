@@ -24,7 +24,9 @@ const DEFAULTS = {
   tradeDarkPoolColor: '#F4A460',
   tradeThickness: 1,
   showOriginalTradeRank: false,
-  tradeLabelPosition: 'right'
+  tradeLabelPosition: 'right',
+  levelAlertScope: 'off',
+  tradeAlertScope: 'off'
 };
 
 /**
@@ -45,6 +47,7 @@ const SETTINGS = [
   },
   { key: 'lineThickness', group: 'levels', type: 'range', id: 'line-thickness-range', valueId: 'line-thickness-value', suffix: ' px', parse: toInt, onChange: updateLinePreview },
   { key: 'lineOpacity', group: 'levels', type: 'radio', name: 'lineOpacity', parse: toInt, onChange: updateLinePreview },
+  { key: 'levelAlertScope', group: 'levels', type: 'select', id: 'level-alert-scope-select' },
   { key: 'tradeCount', group: 'trades', type: 'radio', name: 'tradeCount', parse: toInt },
   {
     key: 'tradeLitColor', group: 'trades', type: 'color', id: 'trade-lit-color-input',
@@ -57,6 +60,7 @@ const SETTINGS = [
   { key: 'tradeThickness', group: 'trades', type: 'range', id: 'trade-thickness-range', valueId: 'trade-thickness-value', suffix: ' px', parse: toInt },
   { key: 'showOriginalTradeRank', group: 'trades', type: 'switch', id: 'show-original-trade-rank-toggle' },
   { key: 'tradeLabelPosition', group: 'trades', type: 'radio', name: 'tradeLabelPosition' },
+  { key: 'tradeAlertScope', group: 'trades', type: 'select', id: 'trade-alert-scope-select' },
   { key: 'debugMode', group: 'more', type: 'switch', id: 'debug-toggle', onChange: sendDebugMode }
 ];
 
@@ -229,6 +233,29 @@ function clearColorError(setting) {
 function flagColorError(setting) {
   document.getElementById(setting.id).setAttribute('aria-invalid', 'true');
   document.getElementById(setting.errorId).classList.remove('hidden');
+}
+
+/**
+ * Builds a short status suffix describing alert sync results, or '' when there
+ * is nothing worth reporting. `alerts` comes from a DRAW_LEVELS/DRAW_NOTES
+ * response's `alerts` field: `{ created, deleted, kept, skipped, failed, error }`.
+ */
+function alertsNote(alerts) {
+  if (!alerts) return '';
+  const parts = [];
+  if (alerts.created) parts.push(`${alerts.created} added`);
+  if (alerts.deleted) parts.push(`${alerts.deleted} removed`);
+  if (alerts.skipped) parts.push(`${alerts.skipped} skipped (already had alerts)`);
+  if (alerts.failed) parts.push(`${alerts.failed} failed`);
+  if (parts.length === 0) return '';
+  const firstError = alerts.failed ? firstAlertError(alerts) : '';
+  return ` · 🔔 ${parts.join(', ')}${firstError ? `: ${firstError}` : ''}`;
+}
+
+/** Returns the first alert error text, cut to 80 characters for the status line. */
+function firstAlertError(alerts) {
+  const text = (Array.isArray(alerts.errors) && alerts.errors[0]) || alerts.error || '';
+  return text.slice(0, 80);
 }
 
 /** Sends the current debug mode to the background script. */
@@ -557,7 +584,8 @@ async function fetchAndDraw() {
     if (response.levels.length === 0) {
       stopWorking(elements.fetchDrawBtn, 'warning', `No VL levels found for ${currentSymbol}`);
     } else if (response.drawResult?.success) {
-      stopWorking(elements.fetchDrawBtn, 'success', `✅ Drew ${response.drawResult.drawn} levels for ${currentSymbol}`);
+      const note = alertsNote(response.drawResult.alerts);
+      stopWorking(elements.fetchDrawBtn, 'success', `✅ Drew ${response.drawResult.drawn} levels for ${currentSymbol}${note}`);
     } else {
       stopWorking(elements.fetchDrawBtn, 'warning', `⚠️ Fetched ${response.count} levels but draw failed`);
     }
@@ -614,6 +642,7 @@ async function fetchAndDrawTrades() {
       if (skippedCount > 0) {
         statusText += ` · ${skippedCount} outside range`;
       }
+      statusText += alertsNote(response.drawResult.alerts);
       stopWorking(elements.fetchTradesBtn, 'success', statusText);
     } else {
       stopWorking(elements.fetchTradesBtn, 'warning', `⚠️ Fetched ${response.count} trades but draw failed`);

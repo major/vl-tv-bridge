@@ -3,6 +3,12 @@
 All notable changes to VL-TV Bridge.
 
 
+## [2.0.1](https://github.com/major/vl-tv-bridge/compare/v2.0.0...v2.0.1) (2026-10-22)
+
+### 🐛 Bug Fixes
+
+* **alerts:** link created alerts to their drawn rays 🔗 ([3ab15ee](https://github.com/major/vl-tv-bridge/commit/3ab15ee605463a26887ef44bc059531524d55b2c))
+
 ## [2.0.0](https://github.com/major/vl-tv-bridge/compare/v1.9.0...v2.0.0) (2026-10-22)
 
 * **deps:** lock file maintenance ([#64](https://github.com/major/vl-tv-bridge/issues/64)) ([0b8ad12](https://github.com/major/vl-tv-bridge/commit/0b8ad12d6e7f3744d132a13405ed61a64dcd60d5))

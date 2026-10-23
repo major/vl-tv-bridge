@@ -64,7 +64,7 @@ function createChart(options = {}) {
       return null;
     }
   };
-  return { chart, entries, calls };
+  return { chart, entries, calls, options };
 }
 
 /** Load the injected bridge into an isolated VM with message capture. */
@@ -233,6 +233,62 @@ test('records preserve requested times and actual snapped points across VM sessi
   assert.equal(second.result.success, true);
   assert.equal(second.result.results[0].reused, true);
   assert.equal(state.calls.created.length, 1);
+});
+
+test('recorded snapped anchors normalize after chart history loads without replacing the shape', async () => {
+  const state = createChart({ snapSeconds: 3 });
+  const injected = loadInjected(state);
+  const context = await getContext(injected);
+  const first = await reconcile(injected, context, 'levels', [level(10, 100)], []);
+  const originalRecord = first.result.records[0];
+  const shapeId = originalRecord.shapeId;
+
+  state.options.snapSeconds = 0;
+  const afterHistoryLoads = await reconcile(injected, context, 'levels', [level(10, 100)], [originalRecord]);
+
+  assert.equal(afterHistoryLoads.result.success, true);
+  assert.equal(afterHistoryLoads.result.results[0].shapeId, shapeId);
+  assert.equal(afterHistoryLoads.result.results[0].reused, true);
+  assert.equal(afterHistoryLoads.result.results[0].updated, true);
+  assert.deepEqual(plain(state.calls.setPoints), [{ id: shapeId, points: [{ price: 10, time: 100 }] }]);
+  assert.deepEqual(plain(afterHistoryLoads.result.records[0].points), [{ price: 10, time: 100 }]);
+  assert.equal(state.calls.created.length, 1);
+  assert.deepEqual(state.calls.removed, []);
+
+  const exactRedraw = await reconcile(injected, context, 'levels', [level(10, 100)], afterHistoryLoads.result.records);
+
+  assert.equal(exactRedraw.result.success, true);
+  assert.equal(exactRedraw.result.results[0].shapeId, shapeId);
+  assert.equal(exactRedraw.result.results[0].updated, undefined);
+  assert.equal(state.calls.setPoints.length, 1);
+  assert.equal(state.calls.created.length, 1);
+  assert.deepEqual(state.calls.removed, []);
+});
+
+test('failed recorded-anchor normalization keeps its recovery record for retry', async () => {
+  const state = createChart({ snapSeconds: 3 });
+  const injected = loadInjected(state);
+  const context = await getContext(injected);
+  const first = await reconcile(injected, context, 'levels', [level(10, 100)], []);
+  const originalRecord = first.result.records[0];
+  const shapeId = originalRecord.shapeId;
+
+  state.options.snapSeconds = 0;
+  state.entries.get(shapeId).failSetPoints = 1;
+  const failed = await reconcile(injected, context, 'levels', [level(10, 100)], [originalRecord]);
+
+  assert.equal(failed.result.success, false);
+  assert.deepEqual(plain(failed.result.records), plain([originalRecord]));
+  assert.deepEqual(plain(state.entries.get(shapeId).points), [{ price: 10, time: 103 }]);
+
+  const retry = await reconcile(injected, context, 'levels', [level(10, 100)], failed.result.records);
+
+  assert.equal(retry.result.success, true);
+  assert.equal(retry.result.results[0].shapeId, shapeId);
+  assert.deepEqual(plain(retry.result.records[0].points), [{ price: 10, time: 100 }]);
+  assert.equal(state.calls.setPoints.length, 2);
+  assert.equal(state.calls.created.length, 1);
+  assert.deepEqual(state.calls.removed, []);
 });
 
 test('moved recorded drawings are replaced and deleted recorded drawings are recreated', async () => {

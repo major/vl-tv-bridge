@@ -757,6 +757,7 @@
       });
       if (match) {
         plan.candidate = match;
+        plan.normalizePoints = match.points[0].time !== plan.points[0].time;
         matchedCandidates.add(match);
       }
     }

@@ -3,6 +3,16 @@
 All notable changes to VL-TV Bridge.
 
 
+## [2.0.2](https://github.com/major/vl-tv-bridge/compare/v2.0.1...v2.0.2) (2026-10-23)
+
+### 🐛 Bug Fixes
+
+* **drawings:** retry snapped anchors on redraw ([#78](https://github.com/major/vl-tv-bridge/issues/78)) ([763db08](https://github.com/major/vl-tv-bridge/commit/763db0800b7e07c085487337e29660d6018fe9e5))
+
+### 📚 Documentation
+
+* **agents:** add real browser testing build notes 🦊 ([15886ac](https://github.com/major/vl-tv-bridge/commit/15886ac529a2c3546e6e4dcb97082645f2bbd52f))
+
 ## [2.0.1](https://github.com/major/vl-tv-bridge/compare/v2.0.0...v2.0.1) (2026-10-22)
 
 ### 🐛 Bug Fixes

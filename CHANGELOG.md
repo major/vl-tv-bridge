@@ -3,6 +3,12 @@
 All notable changes to VL-TV Bridge.
 
 
+## [2.0.3](https://github.com/major/vl-tv-bridge/compare/v2.0.2...v2.0.3) (2026-10-23)
+
+### 🐛 Bug Fixes
+
+* **drawings:** replace levels and trades on every draw ([#79](https://github.com/major/vl-tv-bridge/issues/79)) ([1e0a250](https://github.com/major/vl-tv-bridge/commit/1e0a250c2a7afa10fbb79e1a576641f7dd941152))
+
 ## [2.0.2](https://github.com/major/vl-tv-bridge/compare/v2.0.1...v2.0.2) (2026-10-23)
 
 ### 🐛 Bug Fixes

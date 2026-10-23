@@ -135,8 +135,11 @@ function trade(price, timestamp, rank = 1, extras = {}) {
   return { price, timestamp, rank, ...extras };
 }
 
-test('repeated levels and trades reuse chart shapes without mutations', async () => {
+test('repeated level and trade refreshes replace only their own chart shapes', async () => {
   const chartState = createChart();
+  chartState.entries.set('manual', {
+    name: 'horizontal_line', points: [{ price: 99 }], properties: { text: 'My support' }
+  });
   const bridge = createBridge({ chartState });
   const levels = [level(10, 100)];
   const trades = [trade(20, 200)];
@@ -145,15 +148,30 @@ test('repeated levels and trades reuse chart shapes without mutations', async ()
   const firstTrades = await bridge.send({ type: 'DRAW_NOTES', symbol: 'NASDAQ:AAPL', trades });
   const levelId = firstLevels.results[0].shapeId;
   const tradeId = firstTrades.results[0].shapeId;
-  const againLevels = await bridge.send({ type: 'DRAW_LEVELS', symbol: 'NASDAQ:AAPL', levels });
-  const againTrades = await bridge.send({ type: 'DRAW_NOTES', symbol: 'NASDAQ:AAPL', trades });
+  const refreshedLevels = await bridge.send({ type: 'DRAW_LEVELS', symbol: 'NASDAQ:AAPL', levels });
+  const refreshedLevelId = refreshedLevels.results[0].shapeId;
 
-  assert.equal(againLevels.results[0].shapeId, levelId);
-  assert.equal(againTrades.results[0].shapeId, tradeId);
-  assert.deepEqual(chartState.calls, { created: [levelId, tradeId], removed: [], setProperties: [], setPoints: [] });
+  assert.notEqual(refreshedLevelId, levelId);
+  assert.equal(chartState.entries.has(levelId), false);
+  assert.equal(chartState.entries.has(tradeId), true);
+  assert.equal(chartState.entries.has('manual'), true);
+
+  const refreshedTrades = await bridge.send({ type: 'DRAW_NOTES', symbol: 'NASDAQ:AAPL', trades });
+  const refreshedTradeId = refreshedTrades.results[0].shapeId;
+
+  assert.notEqual(refreshedTradeId, tradeId);
+  assert.equal(chartState.entries.has(tradeId), false);
+  assert.equal(chartState.entries.has(refreshedLevelId), true);
+  assert.equal(chartState.entries.has('manual'), true);
+  assert.deepEqual(chartState.calls, {
+    created: [levelId, tradeId, refreshedLevelId, refreshedTradeId],
+    removed: [levelId, tradeId],
+    setProperties: [],
+    setPoints: []
+  });
 });
 
-test('changed ranks, labels, and styles update the existing shape IDs', async () => {
+test('changed ranks, labels, and styles are applied to replacement shapes', async () => {
   const chartState = createChart();
   const bridge = createBridge({ chartState });
   const firstLevel = await bridge.send({ type: 'DRAW_LEVELS', levels: [level(10, null, 'VL support')] });
@@ -168,14 +186,19 @@ test('changed ranks, labels, and styles update the existing shape IDs', async ()
     type: 'DRAW_NOTES', trades: [trade(20, 200, 2)], options: { tradeLitColor: '#654321' }
   });
 
-  assert.equal(nextLevel.results[0].shapeId, levelId);
-  assert.equal(nextTrade.results[0].shapeId, tradeId);
-  assert.equal(chartState.entries.get(levelId).properties.text, 'VL resistance');
-  assert.equal(chartState.entries.get(levelId).properties.linecolor, '#123456');
-  assert.equal(chartState.entries.get(tradeId).properties.text, '● VL #2');
-  assert.equal(chartState.entries.get(tradeId).properties.linecolor, '#654321');
-  assert.equal(chartState.calls.created.length, 2);
-  assert.deepEqual(chartState.calls.removed, []);
+  const nextLevelId = nextLevel.results[0].shapeId;
+  const nextTradeId = nextTrade.results[0].shapeId;
+
+  assert.notEqual(nextLevelId, levelId);
+  assert.notEqual(nextTradeId, tradeId);
+  assert.equal(chartState.entries.has(levelId), false);
+  assert.equal(chartState.entries.has(tradeId), false);
+  assert.equal(chartState.entries.get(nextLevelId).properties.text, 'VL resistance');
+  assert.equal(chartState.entries.get(nextLevelId).properties.linecolor, '#123456');
+  assert.equal(chartState.entries.get(nextTradeId).properties.text, '● VL #2');
+  assert.equal(chartState.entries.get(nextTradeId).properties.linecolor, '#654321');
+  assert.equal(chartState.calls.created.length, 4);
+  assert.deepEqual(chartState.calls.removed, [levelId, tradeId]);
 });
 
 test('category replacement and empty batches preserve trades and manual drawings', async () => {
@@ -189,17 +212,23 @@ test('category replacement and empty batches preserve trades and manual drawings
   const trades = await bridge.send({ type: 'DRAW_NOTES', trades: [trade(30, 300)] });
   const tradeId = trades.results[0].shapeId;
   const replacement = await bridge.send({ type: 'DRAW_LEVELS', levels: [level(20), level(40)] });
+  const replacementIds = replacement.results.map(result => result.shapeId);
 
-  assert.equal(replacement.results[0].shapeId, retainedId);
-  assert.equal(chartState.entries.has(replacement.results[1].shapeId), true);
-  assert.deepEqual(chartState.calls.removed, [oldLevels.results[0].shapeId]);
+  assert.notEqual(replacementIds[0], retainedId);
+  assert.equal(chartState.entries.has(oldLevels.results[0].shapeId), false);
+  assert.equal(chartState.entries.has(retainedId), false);
+  assert.equal(chartState.entries.has(replacementIds[0]), true);
+  assert.equal(chartState.entries.has(replacementIds[1]), true);
+  assert.deepEqual(chartState.calls.removed, oldLevels.results.map(result => result.shapeId));
   assert.equal(chartState.entries.has(tradeId), true);
   assert.equal(chartState.entries.has('manual'), true);
   const empty = await bridge.send({ type: 'DRAW_LEVELS', levels: [] });
   assert.equal(empty.success, true);
-  assert.equal(chartState.entries.has(replacement.results[0].shapeId), false);
+  assert.equal(chartState.entries.has(replacementIds[0]), false);
+  assert.equal(chartState.entries.has(replacementIds[1]), false);
   assert.equal(chartState.entries.has(tradeId), true);
   assert.equal(chartState.entries.has('manual'), true);
+  assert.deepEqual(chartState.calls.removed, [...oldLevels.results.map(result => result.shapeId), ...replacementIds]);
 });
 
 test('clear removes drawings only from the active context and preserves custom labels', async () => {
@@ -211,13 +240,18 @@ test('clear removes drawings only from the active context and preserves custom l
   const active = await activeBridge.send({ type: 'DRAW_LEVELS', levels: [level(10, 100, 'support')] });
   const other = await otherBridge.send({ type: 'DRAW_LEVELS', levels: [level(10, 100, 'VL support')] });
   const repeated = await activeBridge.send({ type: 'DRAW_LEVELS', levels: [level(10, 100, 'support')] });
+  const repeatedId = repeated.results[0].shapeId;
 
-  assert.equal(repeated.results[0].shapeId, active.results[0].shapeId);
-  assert.equal(activeChart.calls.created.length, 1);
+  assert.notEqual(repeatedId, active.results[0].shapeId);
+  assert.equal(activeChart.entries.has(active.results[0].shapeId), false);
+  assert.equal(activeChart.entries.get(repeatedId).properties.text, 'support');
+  assert.equal(activeChart.calls.created.length, 2);
+  assert.deepEqual(activeChart.calls.removed, [active.results[0].shapeId]);
 
   const cleared = await activeBridge.send({ type: 'CLEAR_DRAWN' });
   assert.equal(cleared.success, true);
-  assert.equal(activeChart.entries.has(active.results[0].shapeId), false);
+  assert.equal(activeChart.entries.has(repeatedId), false);
+  assert.deepEqual(activeChart.calls.removed, [active.results[0].shapeId, repeatedId]);
   assert.equal(otherChart.entries.has(other.results[0].shapeId), true);
 });
 
@@ -232,7 +266,7 @@ test('symbol mismatch does not mutate the chart or storage', async () => {
   assert.deepEqual(storage, {});
 });
 
-test('reload reuses the same ID and persists TradingView-snapped timestamps', async () => {
+test('reload replaces the shape and persists TradingView-snapped timestamps', async () => {
   const chartState = createChart({ snapSeconds: 5 });
   const storage = {};
   const firstBridge = createBridge({ chartState, storage });
@@ -243,8 +277,13 @@ test('reload reuses the same ID and persists TradingView-snapped timestamps', as
   assert.deepEqual(records[0].points, [{ price: 10, time: 105 }]);
   const reloadedBridge = createBridge({ chartState, storage });
   const second = await reloadedBridge.send({ type: 'DRAW_LEVELS', levels: [level(10, 100)] });
+  const replacementId = second.results[0].shapeId;
+  const updatedRecords = storage['vlDrawings:["/chart/integration","NASDAQ:AAPL",0]:levels'];
 
-  assert.equal(second.results[0].shapeId, id);
-  assert.equal(chartState.calls.created.length, 1);
-  assert.deepEqual(chartState.calls.removed, []);
+  assert.notEqual(replacementId, id);
+  assert.equal(chartState.entries.has(id), false);
+  assert.deepEqual(updatedRecords[0].points, [{ price: 10, time: 105 }]);
+  assert.equal(updatedRecords[0].shapeId, replacementId);
+  assert.equal(chartState.calls.created.length, 2);
+  assert.deepEqual(chartState.calls.removed, [id]);
 });

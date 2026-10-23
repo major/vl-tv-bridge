@@ -571,16 +571,6 @@
     });
   }
 
-  /** Compare actual shape geometry using exact times and a small relative price tolerance. */
-  function pointsEqual(left, right) {
-    if (left.length !== right.length) return false;
-    return left.every((point, index) => {
-      const other = right[index];
-      const tolerance = Math.max(1e-8, Math.abs(other.price) * 1e-8);
-      return Math.abs(point.price - other.price) <= tolerance && point.time === other.time;
-    });
-  }
-
   /** Build the identity key used to track a desired level or trade. */
   function drawingIdentity(kind, item) {
     if (kind === 'trades') {
@@ -723,83 +713,14 @@
     });
   }
 
-  /** Check whether a candidate has the desired type and anchor geometry. */
-  function candidateMatches(candidate, desired, exactTime) {
-    if (candidate.name !== desired.definition.config.shape) return false;
-    const target = desired.points[0];
-    const actual = candidate.points[0];
-    const tolerance = Math.max(1e-8, Math.abs(target.price) * 1e-8);
-    if (Math.abs(actual.price - target.price) > tolerance) return false;
-    return !exactTime || actual.time === target.time;
-  }
-
-  /** Return properties that differ from the requested text and drawing overrides. */
-  function changedDrawingProperties(candidate, definition) {
-    const requested = { text: definition.config.text, ...definition.config.overrides };
-    const changed = {};
-    for (const [key, value] of Object.entries(requested)) {
-      if (!Object.is(candidate.properties[key], value)) changed[key] = value;
-    }
-    return changed;
-  }
-
-  /** Build one-to-one plans, preferring valid records and then exact legacy anchors. */
-  function matchDesiredDrawings(desired, candidates, records) {
-    const recordById = new Map(records.map(record => [`${typeof record.shapeId}:${record.shapeId}`, record]));
-    const matchedCandidates = new Set();
-    const plans = desired.map(entry => ({ ...entry, candidate: null, normalizePoints: false, changedProperties: {} }));
-    for (const plan of plans) {
-      if (plan.definition.skipped) continue;
-      const match = candidates.find(candidate => {
-        const record = recordById.get(`${typeof candidate.id}:${candidate.id}`);
-        return !matchedCandidates.has(candidate) && record && record.key === plan.key &&
-          pointsEqual(candidate.points, record.points) && candidateMatches(candidate, plan, false);
-      });
-      if (match) {
-        plan.candidate = match;
-        plan.normalizePoints = match.points[0].time !== plan.points[0].time;
-        matchedCandidates.add(match);
-      }
-    }
-    const legacyCandidates = candidates.filter(candidate =>
-      !matchedCandidates.has(candidate) && !recordById.has(`${typeof candidate.id}:${candidate.id}`));
-    for (const plan of plans) {
-      if (plan.definition.skipped || plan.candidate) continue;
-      const exact = legacyCandidates.find(candidate => !matchedCandidates.has(candidate) && candidateMatches(candidate, plan, true));
-      if (exact) {
-        plan.candidate = exact;
-        matchedCandidates.add(exact);
-      }
-    }
-    // Only an unambiguous remaining legacy pair may be adopted with a changed time anchor.
-    for (const plan of plans) {
-      if (plan.definition.skipped || plan.candidate) continue;
-      const desiredPeers = plans.filter(other => !other.definition.skipped && !other.candidate &&
-        other.definition.config.shape === plan.definition.config.shape && candidateMatches({
-          name: other.definition.config.shape,
-          points: other.points
-        }, plan, false));
-      const candidatePeers = legacyCandidates.filter(candidate => !matchedCandidates.has(candidate) && candidateMatches(candidate, plan, false));
-      if (desiredPeers.length === 1 && candidatePeers.length === 1) {
-        plan.candidate = candidatePeers[0];
-        plan.normalizePoints = plan.candidate.points[0].time !== plan.points[0].time;
-        matchedCandidates.add(plan.candidate);
-      }
-    }
-    for (const plan of plans) {
-      if (plan.candidate) plan.changedProperties = changedDrawingProperties(plan.candidate, plan.definition);
-    }
-    return { plans, matchedCandidates };
-  }
-
-  /** Snapshot actual geometry for a newly created or updated shape. */
+  /** Snapshot actual geometry for a newly created shape. */
   function actualPointsForShape(chart, shapeId) {
     const shape = chart.getShapeById(shapeId);
     if (!shape || typeof shape.getPoints !== 'function') throw new Error(`Could not read created shape ${shapeId} points`);
     return canonicalPoints(shape.getPoints(), `Shape ${shapeId} points`);
   }
 
-  /** Create or reconcile all drawings in one category on the captured chart. */
+  /** Replace all owned drawings in one category on the captured chart. */
   async function reconcileDrawings(data) {
     if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Reconciliation request is malformed');
     const { kind, items, records, context } = data;
@@ -814,128 +735,88 @@
     const definitions = buildReconciliationDefinitions(kind, items, chart);
     const savedRecords = validateRecords(records);
     const candidates = readOwnedInventory(chart, kind, savedRecords);
-    const matching = matchDesiredDrawings(definitions, candidates, savedRecords);
-    const staleCandidates = candidates.filter(candidate => !matching.matchedCandidates.has(candidate));
-    const needsCreate = matching.plans.some(plan => !plan.definition.skipped && !plan.candidate);
+    const needsCreate = definitions.some(entry => !entry.definition.skipped);
     if (needsCreate && typeof chart.createShape !== 'function') throw new Error('Chart createShape is unavailable');
-    if (staleCandidates.length && typeof chart.removeEntity !== 'function') throw new Error('Chart removeEntity is unavailable');
-    for (const plan of matching.plans) {
-      if (plan.candidate && Object.keys(plan.changedProperties).length && typeof plan.candidate.shape.setProperties !== 'function') {
-        throw new Error(`Shape ${plan.candidate.id} needs unavailable setProperties`);
-      }
-      if (plan.candidate && plan.normalizePoints && typeof plan.candidate.shape.setPoints !== 'function') {
-        throw new Error(`Shape ${plan.candidate.id} needs unavailable setPoints`);
-      }
-    }
+    if (candidates.length && typeof chart.removeEntity !== 'function') throw new Error('Chart removeEntity is unavailable');
 
     const results = definitions.map(entry => entry.definition.skipped
       ? { ...entry.definition.result, skipped: true }
       : null);
     const removed = [];
-    const recordsById = new Map(savedRecords.map(record => [`${typeof record.shapeId}:${record.shapeId}`, record]));
-    const desiredRecordsById = new Map();
-    /** Save the newest recovery record for a shape, retaining it across later failures. */
-    const storeRecord = record => {
-      const idKey = `${typeof record.shapeId}:${record.shapeId}`;
-      recordsById.set(idKey, record);
-      desiredRecordsById.set(idKey, record);
-    };
-    /** Return recovery records for all prior and successfully changed shapes. */
-    const partialRecords = () => Array.from(recordsById.values());
-    let failedIndex = -1;
-    let failure = null;
+    const candidateIds = new Set(candidates.map(candidate => `${typeof candidate.id}:${candidate.id}`));
+    const recoveryRecords = new Map(savedRecords
+      .filter(record => candidateIds.has(`${typeof record.shapeId}:${record.shapeId}`))
+      .map(record => [`${typeof record.shapeId}:${record.shapeId}`, record]));
 
-    for (let index = 0; index < matching.plans.length; index++) {
-      const plan = matching.plans[index];
-      if (plan.definition.skipped) continue;
-      let attemptedShapeId = null;
-      let pointNormalizationCompleted = false;
-      try {
-        assertDrawingContext(context.key);
-        let shapeId;
-        let actualPoints;
-        let updated = false;
-        if (plan.candidate) {
-          shapeId = plan.candidate.id;
-          if (plan.normalizePoints) {
-            await plan.candidate.shape.setPoints(plan.points);
-            pointNormalizationCompleted = true;
-            assertDrawingContext(context.key);
-            updated = true;
-          }
-          if (Object.keys(plan.changedProperties).length) {
-            await plan.candidate.shape.setProperties(plan.changedProperties);
-            assertDrawingContext(context.key);
-            updated = true;
-          }
-          actualPoints = actualPointsForShape(chart, shapeId);
-        } else {
-          shapeId = await chart.createShape(plan.definition.point, plan.definition.config);
-          if (!shapeId) throw new Error('createShape returned no ID');
-          attemptedShapeId = shapeId;
-          storeRecord({ shapeId, key: plan.key, points: plan.points });
-          assertDrawingContext(context.key);
-          actualPoints = actualPointsForShape(chart, shapeId);
-        }
-        const record = { shapeId, key: plan.key, points: actualPoints };
-        storeRecord(record);
-        results[index] = {
-          shapeId,
-          ...plan.definition.result,
-          success: true,
-          ...(plan.candidate ? { reused: true } : {}),
-          ...(updated ? { updated: true } : {})
-        };
-      } catch (error) {
-        failedIndex = index;
-        failure = error;
-        if (plan.candidate && plan.candidate.id !== undefined &&
-            (!plan.normalizePoints || pointNormalizationCompleted)) {
-          try {
-            const currentPoints = actualPointsForShape(chart, plan.candidate.id);
-            storeRecord({ shapeId: plan.candidate.id, key: plan.key, points: currentPoints });
-          } catch (snapshotError) {
-            // Retain the previous record if a failed mutation prevents a safe new snapshot.
-          }
-        } else if (attemptedShapeId !== null) {
-          try {
-            const currentPoints = actualPointsForShape(chart, attemptedShapeId);
-            storeRecord({ shapeId: attemptedShapeId, key: plan.key, points: currentPoints });
-          } catch (snapshotError) {
-            // Keep the requested anchor as a recovery record if TradingView cannot expose the new points yet.
-          }
-        }
-        results[index] = { ...plan.definition.result, success: false, error: error.message || String(error) };
-        break;
-      }
-    }
-
-    if (failure) {
-      for (let index = failedIndex + 1; index < results.length; index++) {
-        if (!results[index]) results[index] = { ...definitions[index].definition.result, success: false, error: 'Not attempted' };
-      }
-      return { success: false, results, removed, records: partialRecords(), error: failure.message || String(failure) };
-    }
-
-    for (const candidate of staleCandidates) {
+    for (const candidate of candidates) {
+      const idKey = `${typeof candidate.id}:${candidate.id}`;
       try {
         assertDrawingContext(context.key);
         await chart.removeEntity(candidate.id);
-        assertDrawingContext(context.key);
         removed.push(candidate.id);
-        recordsById.delete(`${typeof candidate.id}:${candidate.id}`);
+        recoveryRecords.delete(idKey);
+        assertDrawingContext(context.key);
       } catch (error) {
+        for (let index = 0; index < results.length; index++) {
+          if (!results[index]) {
+            results[index] = { ...definitions[index].definition.result, success: false, error: 'Not attempted' };
+          }
+        }
         return {
           success: false,
           results,
           removed,
-          records: [...desiredRecordsById.values(), ...Array.from(recordsById.values()).filter(record =>
-            !desiredRecordsById.has(`${typeof record.shapeId}:${record.shapeId}`) && !removed.some(id => id === record.shapeId))],
+          records: Array.from(recoveryRecords.values()),
           error: error.message || String(error)
         };
       }
     }
-    return { success: true, results, removed, records: Array.from(desiredRecordsById.values()) };
+
+    /** Store the latest recovery data for a newly created shape. */
+    const storeRecoveryRecord = record => {
+      recoveryRecords.set(`${typeof record.shapeId}:${record.shapeId}`, record);
+    };
+
+    for (let index = 0; index < definitions.length; index++) {
+      const entry = definitions[index];
+      if (entry.definition.skipped) continue;
+      let shapeId = null;
+      try {
+        assertDrawingContext(context.key);
+        shapeId = await chart.createShape(entry.definition.point, entry.definition.config);
+        if (!shapeId) throw new Error('createShape returned no ID');
+        storeRecoveryRecord({ shapeId, key: entry.key, points: entry.points });
+        assertDrawingContext(context.key);
+        const points = actualPointsForShape(chart, shapeId);
+        const record = { shapeId, key: entry.key, points };
+        storeRecoveryRecord(record);
+        results[index] = { shapeId, ...entry.definition.result, success: true };
+      } catch (error) {
+        if (shapeId !== null) {
+          try {
+            const points = actualPointsForShape(chart, shapeId);
+            storeRecoveryRecord({ shapeId, key: entry.key, points });
+          } catch (snapshotError) {
+            // Keep the requested anchor if TradingView cannot expose the created shape points.
+          }
+        }
+        results[index] = { ...entry.definition.result, success: false, error: error.message || String(error) };
+        for (let remaining = index + 1; remaining < results.length; remaining++) {
+          if (!results[remaining]) {
+            results[remaining] = { ...definitions[remaining].definition.result, success: false, error: 'Not attempted' };
+          }
+        }
+        return {
+          success: false,
+          results,
+          removed,
+          records: Array.from(recoveryRecords.values()),
+          error: error.message || String(error)
+        };
+      }
+    }
+
+    return { success: true, results, removed, records: Array.from(recoveryRecords.values()) };
   }
 
   let drawingQueue = Promise.resolve();
